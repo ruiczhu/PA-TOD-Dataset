@@ -7,4 +7,5 @@ main.tex
 /datasets/sgd_processed_test
 /datasets/sgd_transformed_test
 /datasets/sgd_transformed_train
+/output
 
