@@ -74,8 +74,10 @@ def process_sgd_dataset():
     处理整个SGD数据集
     """
     # 定义路径
-    input_dir = "datasets/original_data/dstc8-schema-guided-dialogue/train"
-    output_dir = "datasets/sgd_processed"
+    # input_dir = "datasets/original_data/dstc8-schema-guided-dialogue/train"
+    input_dir = "datasets/original_data/dstc8-schema-guided-dialogue/test"
+    # output_dir = "datasets/sgd_processed_train"
+    output_dir = "datasets/sgd_processed_test"
     
     # 获取当前脚本的绝对路径，并构建相对于项目根目录的路径
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -126,54 +128,7 @@ def process_sgd_dataset():
     print(f"处理失败: {error_count} 个文件")
     print(f"输出目录: {output_path}")
 
-def verify_processing(input_file_path: str, output_file_path: str) -> bool:
-    """
-    验证处理结果
-    
-    Args:
-        input_file_path: 原始文件路径
-        output_file_path: 处理后文件路径
-        
-    Returns:
-        验证是否通过
-    """
-    try:
-        # 读取原始文件和处理后的文件
-        with open(input_file_path, 'r', encoding='utf-8') as f:
-            original_data = json.load(f)
-        
-        with open(output_file_path, 'r', encoding='utf-8') as f:
-            processed_data = json.load(f)
-        
-        # 验证对话数量是否一致
-        if len(original_data) != len(processed_data):
-            print(f"错误: 对话数量不一致 - 原始: {len(original_data)}, 处理后: {len(processed_data)}")
-            return False
-        
-        # 验证每个对话的结构
-        for i, (orig_dialogue, proc_dialogue) in enumerate(zip(original_data, processed_data)):
-            # 检查是否添加了personality字段
-            if 'personality' not in proc_dialogue:
-                print(f"错误: 对话 {i} 缺少personality字段")
-                return False
-            
-            # 检查turns数量是否一致
-            if len(orig_dialogue.get('turns', [])) != len(proc_dialogue.get('turns', [])):
-                print(f"错误: 对话 {i} 的turns数量不一致")
-                return False
-            
-            # 检查每个turn是否添加了transformed_utterance字段
-            for j, (orig_turn, proc_turn) in enumerate(zip(orig_dialogue.get('turns', []), proc_dialogue.get('turns', []))):
-                if 'utterance' in orig_turn and 'transformed_utterance' not in proc_turn:
-                    print(f"错误: 对话 {i}, turn {j} 缺少transformed_utterance字段")
-                    return False
-        
-        print(f"验证通过: {output_file_path}")
-        return True
-        
-    except Exception as e:
-        print(f"验证文件时出错: {str(e)}")
-        return False
+
 
 def main():
     """
@@ -184,21 +139,6 @@ def main():
     
     # 处理数据集
     process_sgd_dataset()
-    
-    # 验证处理结果（验证第一个文件作为示例）
-    print("\n" + "=" * 50)
-    print("验证处理结果...")
-    
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-    project_root = os.path.dirname(script_dir)
-    
-    input_sample = os.path.join(project_root, "datasets/original_data/dstc8-schema-guided-dialogue/train/dialogues_001.json")
-    output_sample = os.path.join(project_root, "datasets/sgd_processed/dialogues_001.json")
-    
-    if os.path.exists(input_sample) and os.path.exists(output_sample):
-        verify_processing(input_sample, output_sample)
-    else:
-        print("无法找到样本文件进行验证")
 
 if __name__ == "__main__":
     main()

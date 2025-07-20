@@ -3,4 +3,6 @@ __pycache__/
 /config
 main.tex
 /datasets/original_data
-/datasets/sgd_processed
+/datasets/sgd_processed_train
+/datasets/sgd_processed_test
+
