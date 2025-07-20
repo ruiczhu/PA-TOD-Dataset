@@ -27,10 +27,10 @@ def main():
         services = pipeline.get_available_services()
         print(f"Available services: {len(services)}")
         
-        # Transform 4 dialogues for demonstration
-        print("\nTransforming 4 dialogues...")
+        # Transform 20 dialogues for demonstration
+        print("\nTransforming 20 dialogues...")
         transformed_dialogues = pipeline.transform_dialogues(
-            dialogue_count=2,
+            dialogue_count=20,
             random_seed=42,
             temperature=0.7,
             max_tokens=2000
