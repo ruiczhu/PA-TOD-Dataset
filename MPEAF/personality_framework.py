@@ -9,7 +9,6 @@ class PersonalityFramework:
         self.NEO_PIR_FACETS = OrderedDict([
             ('O', {  # Openness 开放性
                 'name': 'Openness',
-                'chinese_name': '开放性',
                 'facets': [
                     'O1_Fantasy',           # 幻想
                     'O2_Aesthetics',        # 审美
@@ -53,7 +52,6 @@ class PersonalityFramework:
             }),
             ('C', {  # Conscientiousness 尽责性
                 'name': 'Conscientiousness',
-                'chinese_name': '尽责性',
                 'facets': [
                     'C1_Competence',        # 胜任
                     'C2_Order',             # 条理
@@ -97,7 +95,6 @@ class PersonalityFramework:
             }),
             ('E', {  # Extraversion 外向性
                 'name': 'Extraversion',
-                'chinese_name': '外向性',
                 'facets': [
                     'E1_Warmth',            # 热情
                     'E2_Gregariousness',    # 群居性
@@ -141,7 +138,6 @@ class PersonalityFramework:
             }),
             ('A', {  # Agreeableness 宜人性
                 'name': 'Agreeableness',
-                'chinese_name': '宜人性',
                 'facets': [
                     'A1_Trust',             # 信任
                     'A2_Straightforwardness', # 直率
@@ -185,7 +181,6 @@ class PersonalityFramework:
             }),
             ('N', {  # Neuroticism 神经质
                 'name': 'Neuroticism',
-                'chinese_name': '神经质',
                 'facets': [
                     'N1_Anxiety',           # 焦虑
                     'N2_Angry_Hostility',   # 敌对性
@@ -257,7 +252,6 @@ class PersonalityFramework:
                     "full_name": facet,
                     "dimension": domain,
                     "dimension_name": info['name'],
-                    "dimension_chinese_name": info['chinese_name'],
                     "markers": self.get_trait_markers(facet_code)
                 }
         return result
@@ -268,6 +262,5 @@ class PersonalityFramework:
         for domain, info in self.NEO_PIR_FACETS.items():
             dimensions[domain] = {
                 'name': info['name'],
-                'chinese_name': info['chinese_name']
             }
         return dimensions
