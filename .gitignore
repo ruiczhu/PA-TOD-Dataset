@@ -8,4 +8,11 @@ main.tex
 /datasets/sgd_transformed_test
 # /datasets/sgd_transformed_train
 /output
-
+/personality_detector/dataset_pandora
+/outline.md
+/personality_detector
+/personality_behavior_val/val_results
+/personality_behavior_val/plots
+/personality_behavior_val/processed_data_encoded.csv
+/analysis_plots*
+/complete_analysis_results_summary*
