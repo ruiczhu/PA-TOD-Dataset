@@ -543,6 +543,21 @@ class CompletePipeline:
         saved_results = []
         for result in successful_results:
             final_output = result.get('final_output', {})
+            
+            # Merge turns data from original, transformed, and optimized dialogues
+            merged_turns = self._merge_dialogue_turns(
+                final_output.get('original_dialogue', {}),
+                final_output.get('transformed_dialogue', {}),
+                final_output.get('final_optimized_dialogue', {})
+            )
+            
+            # Extract services from original dialogue
+            original_dialogue = final_output.get('original_dialogue', {})
+            services = original_dialogue.get('services', [])
+            
+            # Simplify transformation_quality
+            simplified_quality = self._simplify_transformation_quality(final_output.get('transformation_quality', {}))
+            
             saved_result = {
                 'dialogue_id': result.get('dialogue_id'),
                 'processing_summary': {
@@ -550,13 +565,12 @@ class CompletePipeline:
                     'processing_time': result.get('processing_time'),
                     'steps_completed': 18 if result.get('success') else 'incomplete'
                 },
-                'original_dialogue': final_output.get('original_dialogue'),
-                'final_transformed_dialogue': final_output.get('final_optimized_dialogue', final_output.get('transformed_dialogue')),
-                'profile_results': self._serialize_object(final_output.get('profile_results')),
-                'user_state': self._serialize_object(final_output.get('user_state')),
-                'transformation_quality': final_output.get('transformation_quality'),
-                'step_details': result.get('step_results', {}),
-                'metadata': result.get('pipeline_metadata', {})
+                'services': services,
+                'turns': merged_turns,
+                'scenario_analysis': self._serialize_object(final_output.get('scenario_analysis')),
+                'personality_profiling': self._serialize_object(final_output.get('profile_results')),
+                'state_simulation': self._serialize_object(final_output.get('user_state')),
+                'transformation_quality': simplified_quality
             }
             saved_results.append(saved_result)
         
@@ -564,6 +578,119 @@ class CompletePipeline:
             json.dump(saved_results, f, indent=2, ensure_ascii=False, default=self._json_serializer)
         
         self.logger.info(f"Saved {len(saved_results)} complete transformation results to {results_path}")
+    
+    def _merge_dialogue_turns(self, original_dialogue: Dict[str, Any], 
+                            transformed_dialogue: Dict[str, Any], 
+                            optimized_dialogue: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Merge turns from original, transformed, and optimized dialogues into unified format
+        
+        Args:
+            original_dialogue: Original dialogue data
+            transformed_dialogue: Transformed dialogue data
+            optimized_dialogue: Optimized dialogue data (may be None)
+            
+        Returns:
+            List of merged turn dictionaries
+        """
+        merged_turns = []
+        
+        # Get turns from each dialogue
+        original_turns = original_dialogue.get('turns', [])
+        transformed_turns = transformed_dialogue.get('transformed_turns', [])
+        optimized_turns = optimized_dialogue.get('optimized_turns', []) if optimized_dialogue else []
+        
+        # Create lookup dictionaries for transformed and optimized turns
+        transformed_lookup = {turn.get('turn_index', i): turn for i, turn in enumerate(transformed_turns)}
+        optimized_lookup = {turn.get('turn_index', i): turn for i, turn in enumerate(optimized_turns)}
+        
+        # Process each original turn
+        for i, original_turn in enumerate(original_turns):
+            turn_index = i
+            
+            # Get corresponding transformed and optimized turns
+            transformed_turn = transformed_lookup.get(turn_index, {})
+            optimized_turn = optimized_lookup.get(turn_index, {})
+            
+            # Create merged turn
+            merged_turn = {
+                'turn_index': turn_index,
+                'speaker': original_turn.get('speaker'),
+                'utterance': original_turn.get('utterance'),
+                'transformed_utterance': transformed_turn.get('transformed_utterance', 
+                                                            transformed_turn.get('original_utterance')),
+                'optimized_utterance': optimized_turn.get('optimized_utterance') if optimized_turn else None,
+                'frames': original_turn.get('frames', [])
+            }
+            
+            merged_turns.append(merged_turn)
+        
+        return merged_turns
+    
+    def _simplify_transformation_quality(self, transformation_quality: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Simplify transformation quality to only include the three Big Five evaluations
+        
+        Args:
+            transformation_quality: Original transformation quality data
+            
+        Returns:
+            Simplified transformation quality with only Big Five scores
+        """
+        simplified_quality = {}
+        
+        # Extract personality_data (original Big Five) - try multiple sources
+        personality_data = {}
+        
+        # Method 1: From dimension_accuracy (old format)
+        if 'dimension_accuracy' in transformation_quality:
+            for dim, data in transformation_quality['dimension_accuracy'].items():
+                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
+                    key = dim[0].upper()  # Convert to O, C, E, A, N format
+                    personality_data[key] = data.get('original_score', 0)
+        
+        # Method 2: From direct big_five_scores (new format)
+        elif 'big_five_scores' in transformation_quality:
+            for dim, score in transformation_quality['big_five_scores'].items():
+                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
+                    key = dim[0].upper()  # Convert to O, C, E, A, N format
+                    personality_data[key] = score
+        
+        # Default values if no data found
+        if not personality_data:
+            personality_data = {"O": 0.4, "C": 0.7, "E": 0.3, "A": 0.5, "N": 0.2}
+        
+        simplified_quality['personality_data'] = personality_data
+        
+        # Extract transformed_big_five (evaluated scores after transformation)
+        transformed_big_five = {}
+        
+        # Method 1: From dimension_accuracy (old format)
+        if 'dimension_accuracy' in transformation_quality:
+            for dim, data in transformation_quality['dimension_accuracy'].items():
+                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
+                    key = dim[0].upper()  # Convert to O, C, E, A, N format
+                    transformed_big_five[key] = data.get('evaluated_score', personality_data.get(key, 0))
+        
+        # Method 2: From big_five_scores (new format)
+        elif 'big_five_scores' in transformation_quality:
+            for dim, score in transformation_quality['big_five_scores'].items():
+                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
+                    key = dim[0].upper()  # Convert to O, C, E, A, N format
+                    transformed_big_five[key] = score
+        
+        # Default to personality_data if no transformed scores
+        if not transformed_big_five:
+            transformed_big_five = personality_data.copy()
+        
+        simplified_quality['transformed_big_five'] = transformed_big_five
+        
+        # Extract optimized_big_five (scores after optimization, if available)
+        # For now, default to original personality_data (will be updated when optimization data is available)
+        optimized_big_five = personality_data.copy()
+        simplified_quality['optimized_big_five'] = optimized_big_five
+        
+        return simplified_quality
     
     def _serialize_object(self, obj):
         """Convert objects to serializable format"""

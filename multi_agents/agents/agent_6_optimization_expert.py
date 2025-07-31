@@ -369,26 +369,19 @@ Provide your optimization in the following JSON format:
             "turn_index": 0,
             "speaker": "USER",
             "original_utterance": "Original transformed text",
-            "optimized_utterance": "Improved text with better personality expression",
-            "optimization_changes": ["Specific changes made and rationale"],
-            "personality_improvements": ["Which personality dimensions were enhanced"]
+            "optimized_utterance": "Improved text with better personality expression"
+        }},
+        {{
+            "turn_index": 1,
+            "speaker": "SYSTEM", 
+            "original_utterance": "Original system response",
+            "optimized_utterance": "Enhanced system response for better user interaction"
         }}
-    ],
-    "optimization_summary": {{
-        "primary_improvements": ["Main personality enhancements made"],
-        "dimensions_optimized": ["List of personality dimensions that were improved"],
-        "preservation_notes": ["Elements that were preserved from original"],
-        "expected_evaluation_improvements": ["Predicted improvements in evaluation scores"]
-    }},
-    "quality_assessment": {{
-        "optimization_quality": "Assessment of optimization effectiveness",
-        "authenticity_improvement": "How natural personality expression was enhanced",
-        "functional_integrity": "Confirmation that all functional elements were preserved",
-        "overall_enhancement": "Summary of overall dialogue improvement"
-    }}
+    ]
 }}
 
-Focus on creating targeted improvements that will demonstrably enhance personality expression while maintaining the dialogue's natural flow and functional effectiveness."""
+Only include turns that have been optimized. If a turn doesn't need optimization, omit it from the output.
+Focus on creating targeted improvements that enhance personality expression while maintaining natural conversation flow."""
 
         return prompt
     

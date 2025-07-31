@@ -276,6 +276,27 @@ Quality standards:
 3. **Contextual Adaptation**: Ensure dialogue tone and urgency match the scenario and environmental factors
 4. **Functional Preservation**: Maintain all service-related information, intents, and task completion elements
 5. **Natural Flow**: Create conversations that sound like authentic human speech, not scripted interactions
+6. **CRITICAL: Context Coherence**: Ensure transformed dialogue maintains logical flow and avoids contradictions
+
+### MANDATORY Context Coherence Rules:
+
+**BEFORE transforming any turn, analyze the previous turns to ensure logical consistency:**
+
+1. **Information Flow Check**: If a user provides information in an earlier turn, subsequent system questions should NOT ask for the same information
+   - BAD: User says "I need a flight to Beijing" → System asks "Where do you want to go?"
+   - GOOD: User says "I need a flight to Beijing" → System asks "When would you like to travel?"
+
+2. **Progressive Information Building**: Each turn should build upon previously established information
+   - BAD: Ignoring previously mentioned details
+   - GOOD: Referencing and building on established context
+
+3. **Logical Question Sequencing**: System questions should follow natural information-gathering progression
+   - GOOD: Destination → Date → Time → Confirmation
+   - BAD: Date → Destination → Date again
+
+4. **User Response Consistency**: User responses should be consistent with their previous statements unless explicitly changing/correcting
+
+5. **Context-Aware Adaptations**: When transforming, consider what information is ALREADY established in the conversation
 
 ### Specific Transformation Guidelines:
 
@@ -284,11 +305,14 @@ Quality standards:
 - Reflect current emotional state in tone and word choice (e.g., anxiety = more hesitant language; confidence = more direct requests)
 - Integrate physical/cognitive state (e.g., time pressure = more urgent language; high cognitive load = simpler expression)
 - Match scenario context (e.g., formal setting = more polite language; urgent situation = more direct communication)
+- **ENSURE consistency with previous statements** - don't contradict earlier information provided
 
 **For SYSTEM turns:**
 - Maintain professional service quality
 - Adapt response style to user's communication patterns for better rapport
 - Include appropriate acknowledgment of user's state when relevant
+- **CRITICAL**: Only ask for information that hasn't been provided yet
+- Build confirmations based on already-established context
 
 ### Language Pattern Examples by Personality:
 
@@ -313,6 +337,23 @@ Quality standards:
 **Low Confidence**: More questioning, seeking confirmation
 **Time Pressure**: More urgent, focused language
 **Physical Discomfort**: Shorter interactions, more efficient communication
+
+### 🚨 Context Coherence Examples:
+
+**Example 1 - Flight Booking:**
+- Turn 1: USER: "I need to book a flight to Beijing"
+- Turn 2: SYSTEM: "Where would you like to fly to?" (WRONG - destination already given)
+- Turn 2: SYSTEM: "When would you like to travel to Beijing?" (CORRECT - builds on established info)
+
+**Example 2 - Restaurant:**
+- Turn 1: USER: "I want to book a table for Italian food"
+- Turn 2: SYSTEM: "What kind of cuisine?" (WRONG - cuisine already specified)
+- Turn 2: SYSTEM: "What time would you like your Italian restaurant reservation?" (CORRECT)
+
+**Example 3 - Building Context:**
+- Turn 1: USER: "I need a ride to the airport for 6 PM"
+- Turn 2: SYSTEM: "What time do you need the ride?" (WRONG - time already given)
+- Turn 2: SYSTEM: "I can arrange a 6 PM ride to the airport. Where should I pick you up?" (CORRECT)
 
 ## Output Format
 

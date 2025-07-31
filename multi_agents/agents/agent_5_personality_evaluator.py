@@ -318,53 +318,10 @@ Provide your assessment in the following JSON format:
         "extraversion": 0.X,
         "agreeableness": 0.X,
         "neuroticism": 0.X
-    }},
-    "detailed_analysis": {{
-        "openness": {{
-            "score": 0.X,
-            "evidence": ["Specific examples from dialogue supporting this score"],
-            "key_indicators": ["Main linguistic patterns observed"],
-            "confidence": "High/Medium/Low assessment confidence"
-        }},
-        "conscientiousness": {{
-            "score": 0.X,
-            "evidence": ["Specific examples from dialogue supporting this score"],
-            "key_indicators": ["Main linguistic patterns observed"],
-            "confidence": "High/Medium/Low assessment confidence"
-        }},
-        "extraversion": {{
-            "score": 0.X,
-            "evidence": ["Specific examples from dialogue supporting this score"],
-            "key_indicators": ["Main linguistic patterns observed"],
-            "confidence": "High/Medium/Low assessment confidence"
-        }},
-        "agreeableness": {{
-            "score": 0.X,
-            "evidence": ["Specific examples from dialogue supporting this score"],
-            "key_indicators": ["Main linguistic patterns observed"],
-            "confidence": "High/Medium/Low assessment confidence"
-        }},
-        "neuroticism": {{
-            "score": 0.X,
-            "evidence": ["Specific examples from dialogue supporting this score"],
-            "key_indicators": ["Main linguistic patterns observed"],
-            "confidence": "High/Medium/Low assessment confidence"
-        }}
-    }},
-    "overall_assessment": {{
-        "dominant_traits": ["List 2-3 most prominent personality characteristics"],
-        "personality_summary": "Brief description of overall personality profile",
-        "authenticity_assessment": "Evaluation of whether personality expression feels natural vs. artificial",
-        "communication_style": "Description of overall communication approach and style"
-    }},
-    "evaluation_metadata": {{
-        "utterances_analyzed": X,
-        "evaluation_confidence": "Overall confidence in assessment",
-        "limitations": ["Any factors that might affect assessment accuracy"]
     }}
 }}
 
-Focus on providing accurate, evidence-based assessments that reflect genuine psychological insight rather than superficial pattern matching."""
+Provide only the Big Five scores as decimal values between 0.0 and 1.0. Focus on accurate assessment based on the dialogue content."""
 
         return prompt
     
