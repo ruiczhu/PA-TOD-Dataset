@@ -14,9 +14,6 @@ from typing import Dict, Any, Optional
 try:
     from config.config import API_KEY_GPT_4, API_URL_GPT_40
 except ImportError:
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from config.config import API_KEY_GPT_4, API_URL_GPT_40
 
 

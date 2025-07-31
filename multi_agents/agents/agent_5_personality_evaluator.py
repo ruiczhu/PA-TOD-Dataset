@@ -10,11 +10,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 
-# Import utilities with proper path handling
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from multi_agents.utils.llm_interface import LLMInterface
 
 
@@ -88,36 +83,31 @@ Big Five evaluation framework:
         Raises:
             Exception: If evaluation fails
         """
-        try:
-            # Extract dialogue content for evaluation
-            dialogue_content = self._extract_dialogue_for_evaluation(transformed_dialogue)
-            
-            if not dialogue_content:
-                raise ValueError("No dialogue content available for evaluation")
-            
-            # Create blind evaluation prompt
-            evaluation_prompt = self._create_evaluation_prompt(dialogue_content, original_dialogue)
-            
-            # Call LLM for personality evaluation
-            response = self.llm_interface.call_agent(
-                agent_name=self.agent_name,
-                system_prompt=self.system_prompt,
-                user_prompt=evaluation_prompt,
-                temperature=0.3,  # Lower temperature for consistent evaluation
-                max_tokens=2500
-            )
-            
-            if response.get('success', False):
-                # Parse evaluation results
-                evaluation_results = self._parse_evaluation_response(response['content'])
-                self.logger.info(f"Personality evaluation completed successfully")
-                return evaluation_results
-            else:
-                raise Exception("LLM call failed for personality evaluation")
-                
-        except Exception as e:
-            self.logger.error(f"Failed to evaluate personality: {str(e)}")
-            return self._create_fallback_evaluation()
+        # Extract dialogue content for evaluation
+        dialogue_content = self._extract_dialogue_for_evaluation(transformed_dialogue)
+        
+        if not dialogue_content:
+            raise ValueError("No dialogue content available for evaluation")
+        
+        # Create blind evaluation prompt
+        evaluation_prompt = self._create_evaluation_prompt(dialogue_content, original_dialogue)
+        
+        # Call LLM for personality evaluation
+        response = self.llm_interface.call_agent(
+            agent_name=self.agent_name,
+            system_prompt=self.system_prompt,
+            user_prompt=evaluation_prompt,
+            temperature=0.3,  # Lower temperature for consistent evaluation
+            max_tokens=2500
+        )
+        
+        if response.get('success', False):
+            # Parse evaluation results
+            evaluation_results = self._parse_evaluation_response(response['content'])
+            self.logger.info(f"Personality evaluation completed successfully")
+            return evaluation_results
+        else:
+            raise Exception("LLM call failed for personality evaluation")
     
     def evaluate_transformation_quality(self,
                                        original_personality: Dict[str, Any],
@@ -347,92 +337,31 @@ Provide only the Big Five scores as decimal values between 0.0 and 1.0. Focus on
         Returns:
             Structured evaluation results
         """
-        try:
-            # Extract JSON from response
-            response_content = response_content.strip()
-            start_idx = response_content.find('{')
-            end_idx = response_content.rfind('}') + 1
+        # Extract JSON from response
+        response_content = response_content.strip()
+        start_idx = response_content.find('{')
+        end_idx = response_content.rfind('}') + 1
+        
+        if start_idx >= 0 and end_idx > start_idx:
+            json_content = response_content[start_idx:end_idx]
+            evaluation_data = json.loads(json_content)
             
-            if start_idx >= 0 and end_idx > start_idx:
-                json_content = response_content[start_idx:end_idx]
-                evaluation_data = json.loads(json_content)
-                
-                # Validate and structure evaluation results
-                structured_results = {
-                    'big_five_scores': evaluation_data.get('big_five_scores', {}),
-                    'detailed_analysis': evaluation_data.get('detailed_analysis', {}),
-                    'overall_assessment': evaluation_data.get('overall_assessment', {}),
-                    'evaluation_metadata': evaluation_data.get('evaluation_metadata', {}),
-                    'evaluator': self.agent_name,
-                    'evaluation_success': True
-                }
-                
-                return structured_results
-                
-            else:
-                raise ValueError("No valid JSON found in evaluation response")
-                
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            self.logger.warning(f"Failed to parse evaluation response: {str(e)}")
-            return self._extract_evaluation_from_text(response_content)
+            # Validate and structure evaluation results
+            structured_results = {
+                'big_five_scores': evaluation_data.get('big_five_scores', {}),
+                'detailed_analysis': evaluation_data.get('detailed_analysis', {}),
+                'overall_assessment': evaluation_data.get('overall_assessment', {}),
+                'evaluation_metadata': evaluation_data.get('evaluation_metadata', {}),
+                'evaluator': self.agent_name,
+                'evaluation_success': True
+            }
+            
+            return structured_results
+            
+        else:
+            raise ValueError("No valid JSON found in evaluation response")
     
-    def _extract_evaluation_from_text(self, text: str) -> Dict[str, Any]:
-        """
-        Extract evaluation information from free text when JSON parsing fails
-        
-        Args:
-            text: Raw evaluation text
-            
-        Returns:
-            Basic evaluation structure
-        """
-        # Try to extract personality scores from text
-        big_five_scores = {}
-        
-        # Look for personality dimension mentions and scores
-        dimensions = ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']
-        
-        for dimension in dimensions:
-            # Look for patterns like "openness: 0.7" or "Openness = 0.65"
-            import re
-            patterns = [
-                rf"{dimension}[:\s=]+([0-9]\.[0-9]+)",
-                rf"{dimension.capitalize()}[:\s=]+([0-9]\.[0-9]+)"
-            ]
-            
-            for pattern in patterns:
-                match = re.search(pattern, text, re.IGNORECASE)
-                if match:
-                    try:
-                        score = float(match.group(1))
-                        if 0.0 <= score <= 1.0:
-                            big_five_scores[dimension] = score
-                            break
-                    except ValueError:
-                        continue
-        
-        # If no scores found, provide moderate defaults
-        if not big_five_scores:
-            big_five_scores = {dim: 0.5 for dim in dimensions}
-        
-        return {
-            'big_five_scores': big_five_scores,
-            'detailed_analysis': {
-                'extraction_note': 'Scores extracted from text analysis'
-            },
-            'overall_assessment': {
-                'personality_summary': 'Moderate personality profile - detailed analysis unavailable'
-            },
-            'evaluation_metadata': {
-                'utterances_analyzed': 'Unknown',
-                'evaluation_confidence': 'Low - text extraction fallback',
-                'limitations': ['JSON parsing failed, used text extraction']
-            },
-            'evaluator': self.agent_name,
-            'evaluation_success': False
-        }
-    
-    def _calculate_transformation_accuracy(self, 
+    def _calculate_transformation_accuracy(self,
                                          original_big5: Dict[str, float],
                                          evaluated_big5: Dict[str, float]) -> Dict[str, float]:
         """
@@ -510,29 +439,4 @@ Provide only the Big Five scores as decimal values between 0.0 and 1.0. Focus on
             'correlation_consistency': correlation_consistency,
             'best_dimensions': [dim for dim, metrics in accuracy_metrics.items() if metrics['accuracy_score'] >= 0.7],
             'improvement_needed': [dim for dim, metrics in accuracy_metrics.items() if metrics['accuracy_score'] < 0.5]
-        }
-    
-    def _create_fallback_evaluation(self) -> Dict[str, Any]:
-        """Create basic fallback evaluation when LLM call fails"""
-        return {
-            'big_five_scores': {
-                'openness': 0.5,
-                'conscientiousness': 0.5,
-                'extraversion': 0.5,
-                'agreeableness': 0.5,
-                'neuroticism': 0.5
-            },
-            'detailed_analysis': {
-                'note': 'Evaluation failed - fallback scores provided'
-            },
-            'overall_assessment': {
-                'personality_summary': 'Unable to assess personality due to evaluation failure',
-                'authenticity_assessment': 'Assessment unavailable'
-            },
-            'evaluation_metadata': {
-                'evaluation_confidence': 'None - fallback used',
-                'limitations': ['LLM evaluation failed', 'Fallback neutral scores provided']
-            },
-            'evaluator': self.agent_name,
-            'evaluation_success': False
         }

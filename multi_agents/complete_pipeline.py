@@ -27,8 +27,6 @@ from multi_agents.data_manager import DataManager
 from multi_agents.visualization import VisualizationManager
 
 # Import MPEAF components
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from MPEAF.dialogue_loader import DialogueLoader
 from MPEAF.personality_framework import PersonalityFramework
 

@@ -11,11 +11,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 
-# Import utilities with proper path handling
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from multi_agents.utils.llm_interface import LLMInterface
 from multi_agents.utils.data_structures import EnhancedDialogue
 
@@ -89,41 +84,35 @@ Quality standards:
         Raises:
             Exception: If transformation fails
         """
-        try:
-            # Extract dialogue turns and metadata
-            dialogue_turns = self._extract_dialogue_turns(original_dialogue)
-            
-            if not dialogue_turns:
-                raise ValueError("No dialogue turns found in original dialogue")
-            
-            # Create transformation prompt with all context
-            transformation_prompt = self._create_transformation_prompt(
-                dialogue_turns, personality_data, user_state, scenario_info, user_profile
-            )
-            
-            # Call LLM to transform dialogue
-            response = self.llm_interface.call_agent(
-                agent_name=self.agent_name,
-                system_prompt=self.system_prompt,
-                user_prompt=transformation_prompt,
-                temperature=0.9,  # Higher creativity for natural language variation
-                max_tokens=3000   # More space for complete dialogue transformation
-            )
-            
-            if response.get('success', False):
-                # Parse transformed dialogue
-                transformed_dialogue = self._parse_transformation_response(
-                    response['content'], original_dialogue
+        # Extract dialogue turns and metadata
+        dialogue_turns = self._extract_dialogue_turns(original_dialogue)
+        
+        if not dialogue_turns:
+            raise ValueError("No dialogue turns found in original dialogue")
+        
+        # Create transformation prompt with all context
+        transformation_prompt = self._create_transformation_prompt(
+            dialogue_turns, personality_data, user_state, scenario_info, user_profile
+        )
+        
+        # Call LLM to transform dialogue
+        response = self.llm_interface.call_agent(
+            agent_name=self.agent_name,
+            system_prompt=self.system_prompt,
+            user_prompt=transformation_prompt,
+            temperature=0.9,  # Higher creativity for natural language variation
+            max_tokens=3000   # More space for complete dialogue transformation
+        )
+        
+        if response.get('success', False):
+            # Parse transformed dialogue
+            transformed_dialogue = self._parse_transformation_response(
+                response['content'], original_dialogue
                 )
-                self.logger.info(f"Dialogue transformed successfully with {len(transformed_dialogue.get('turns', []))} turns")
-                return transformed_dialogue
-            else:
-                raise Exception("LLM call failed for dialogue transformation")
-                
-        except Exception as e:
-            self.logger.error(f"Failed to transform dialogue: {str(e)}")
-            # Return original dialogue with minimal enhancement as fallback
-            return self._create_fallback_transformation(original_dialogue, personality_data, user_state)
+            self.logger.info(f"Dialogue transformed successfully with {len(transformed_dialogue.get('turns', []))} turns")
+            return transformed_dialogue
+        else:
+            raise Exception("LLM call failed for dialogue transformation")
     
     def _extract_dialogue_turns(self, dialogue_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
@@ -552,41 +541,34 @@ Ensure every transformed utterance feels naturally human while accomplishing the
         Returns:
             Structured transformed dialogue
         """
-        try:
-            # Extract JSON from response
-            response_content = response_content.strip()
-            start_idx = response_content.find('{')
-            end_idx = response_content.rfind('}') + 1
+        # Extract JSON from response
+        response_content = response_content.strip()
+        start_idx = response_content.find('{')
+        end_idx = response_content.rfind('}') + 1
+        
+        if start_idx >= 0 and end_idx > start_idx:
+            json_content = response_content[start_idx:end_idx]
+            transformation_data = json.loads(json_content)
             
-            if start_idx >= 0 and end_idx > start_idx:
-                json_content = response_content[start_idx:end_idx]
-                transformation_data = json.loads(json_content)
-                
-                # Extract transformed turns
-                transformed_turns = transformation_data.get('transformed_turns', [])
-                
-                # Create enhanced dialogue structure
-                enhanced_dialogue = {
-                    'dialogue_id': original_dialogue.get('dialogue_id', 'transformed_dialogue'),
-                    'original_dialogue': original_dialogue,
-                    'transformed_turns': transformed_turns,
-                    'transformation_metadata': {
-                        'transformation_summary': transformation_data.get('transformation_summary', {}),
-                        'agent': self.agent_name,
-                        'transformation_success': True
-                    }
+            # Extract transformed turns
+            transformed_turns = transformation_data.get('transformed_turns', [])
+            
+            # Create enhanced dialogue structure
+            enhanced_dialogue = {
+                'dialogue_id': original_dialogue.get('dialogue_id', 'transformed_dialogue'),
+                'original_dialogue': original_dialogue,
+                'transformed_turns': transformed_turns,
+                'transformation_metadata': {
+                    'transformation_summary': transformation_data.get('transformation_summary', {}),
+                    'agent': self.agent_name,
+                    'transformation_success': True
                 }
-                
-                return enhanced_dialogue
-                
-            else:
-                raise ValueError("No valid JSON found in transformation response")
-                
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            self.logger.warning(f"Failed to parse transformation response: {str(e)}")
-            return self._extract_transformation_from_text(response_content, original_dialogue)
-    
-    def _extract_transformation_from_text(self, text: str, original_dialogue: Dict[str, Any]) -> Dict[str, Any]:
+            }
+            
+            return enhanced_dialogue
+            
+        else:
+            raise ValueError("No valid JSON found in transformation response")
         """
         Extract transformation from free text when JSON parsing fails
         
@@ -633,9 +615,9 @@ Ensure every transformed utterance feels naturally human while accomplishing the
         if current_turn:
             transformed_turns.append(current_turn)
         
-        # If no turns found, create fallback
+        # If no turns found, raise error
         if not transformed_turns:
-            transformed_turns = self._create_minimal_transformation(original_dialogue)
+            raise ValueError("No valid transformed turns found in LLM response")
         
         return {
             'dialogue_id': original_dialogue.get('dialogue_id', 'transformed_dialogue'),
@@ -647,99 +629,3 @@ Ensure every transformed utterance feels naturally human while accomplishing the
                 'fallback_used': True
             }
         }
-    
-    def _create_minimal_transformation(self, original_dialogue: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Create minimal transformation as fallback"""
-        original_turns = self._extract_dialogue_turns(original_dialogue)
-        transformed_turns = []
-        
-        for turn in original_turns:
-            transformed_turns.append({
-                'turn_index': turn.get('turn_index', len(transformed_turns)),
-                'speaker': turn.get('speaker', 'USER'),
-                'original_utterance': turn.get('utterance', ''),
-                'transformed_utterance': turn.get('utterance', ''),  # No transformation
-                'transformation_notes': 'Minimal fallback transformation'
-            })
-        
-        return transformed_turns
-    
-    def _create_fallback_transformation(self, 
-                                      original_dialogue: Dict[str, Any],
-                                      personality_data: Dict[str, Any],
-                                      user_state: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Create fallback transformation when LLM call fails
-        
-        Args:
-            original_dialogue: Original dialogue
-            personality_data: Personality information
-            user_state: User state information
-            
-        Returns:
-            Basic transformed dialogue with minimal enhancement
-        """
-        original_turns = self._extract_dialogue_turns(original_dialogue)
-        transformed_turns = []
-        
-        # Apply simple personality-based modifications
-        for turn in original_turns:
-            utterance = turn.get('utterance', '')
-            speaker = turn.get('speaker', 'USER')
-            
-            if speaker == 'USER' and utterance:
-                # Apply basic personality-based modifications
-                transformed_utterance = self._apply_basic_personality_transformation(
-                    utterance, personality_data, user_state
-                )
-            else:
-                transformed_utterance = utterance
-            
-            transformed_turns.append({
-                'turn_index': turn.get('turn_index', len(transformed_turns)),
-                'speaker': speaker,
-                'original_utterance': utterance,
-                'transformed_utterance': transformed_utterance,
-                'transformation_notes': 'Basic fallback transformation applied'
-            })
-        
-        return {
-            'dialogue_id': original_dialogue.get('dialogue_id', 'fallback_transformed'),
-            'original_dialogue': original_dialogue,
-            'transformed_turns': transformed_turns,
-            'transformation_metadata': {
-                'agent': self.agent_name,
-                'transformation_success': False,
-                'fallback_transformation': True
-            }
-        }
-    
-    def _apply_basic_personality_transformation(self,
-                                              utterance: str,
-                                              personality_data: Dict[str, Any],
-                                              user_state: Dict[str, Any]) -> str:
-        """Apply basic personality-based text modifications"""
-        if not utterance:
-            return utterance
-        
-        modified_utterance = utterance
-        
-        # Basic personality modifications
-        big_five = personality_data.get('big_five', {}) if personality_data else {}
-        
-        # High agreeableness - add politeness
-        if big_five.get('A', 0.5) > 0.7:
-            if not any(polite_word in modified_utterance.lower() for polite_word in ['please', 'thank', 'sorry']):
-                modified_utterance = f"Please {modified_utterance.lower()}"
-        
-        # High neuroticism - add uncertainty
-        if big_five.get('N', 0.5) > 0.7:
-            if '?' not in modified_utterance:
-                modified_utterance = f"I think {modified_utterance.lower()}"
-        
-        # Low extraversion - make more tentative
-        if big_five.get('E', 0.5) < 0.3:
-            modified_utterance = modified_utterance.replace('I want', 'I would like')
-            modified_utterance = modified_utterance.replace('I need', 'I would need')
-        
-        return modified_utterance

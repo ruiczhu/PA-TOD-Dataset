@@ -10,11 +10,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 
-# Import utilities with proper path handling
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from multi_agents.utils.llm_interface import LLMInterface
 from multi_agents.utils.data_structures import UserState, EnhancedDialogue
 
@@ -103,8 +98,7 @@ Key expertise areas:
                 
         except Exception as e:
             self.logger.error(f"Failed to simulate user state: {str(e)}")
-            # Return basic state as fallback
-            return self._create_fallback_state(personality_data, scenario_info)
+            raise
     
     def _create_simulation_prompt(self, 
                                 personality_data: Dict[str, Any],
@@ -325,135 +319,29 @@ Ensure the simulation is psychologically realistic and internally consistent, re
         Returns:
             UserState object with parsed data
         """
-        try:
-            # Try to extract JSON from response
-            response_content = response_content.strip()
-            
-            # Find JSON content
-            start_idx = response_content.find('{')
-            end_idx = response_content.rfind('}') + 1
-            
-            if start_idx >= 0 and end_idx > start_idx:
-                json_content = response_content[start_idx:end_idx]
-                state_data = json.loads(json_content)
-                
-                # Create UserState object
-                user_state = UserState(
-                    emotional_state=state_data.get('emotional_state', ''),
-                    stress_level=state_data.get('stress_level', ''),
-                    patience_level=state_data.get('patience_level', ''),
-                    confidence_level=state_data.get('confidence_level', ''),
-                    current_mood=state_data.get('current_mood', ''),
-                    physical_state=state_data.get('physical_state', ''),
-                    cognitive_load=state_data.get('cognitive_load', ''),
-                    situational_factors=state_data.get('situational_factors', {})
-                )
-                
-                return user_state
-                
-            else:
-                raise ValueError("No valid JSON found in response")
-                
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            self.logger.warning(f"Failed to parse state response: {str(e)}")
-            # Create basic state from response text
-            return self._extract_state_from_text(response_content)
-    
-    def _extract_state_from_text(self, text: str) -> UserState:
-        """
-        Extract state information from free text when JSON parsing fails
+        # Try to extract JSON from response
+        response_content = response_content.strip()
         
-        Args:
-            text: Raw text response
+        # Find JSON content
+        start_idx = response_content.find('{')
+        end_idx = response_content.rfind('}') + 1
+        
+        if start_idx >= 0 and end_idx > start_idx:
+            json_content = response_content[start_idx:end_idx]
+            state_data = json.loads(json_content)
             
-        Returns:
-            UserState object with extracted information
-        """
-        # Basic text parsing as fallback
-        user_state = UserState()
-        
-        text_lower = text.lower()
-        
-        # Extract emotional state indicators
-        if 'anxious' in text_lower or 'worried' in text_lower:
-            user_state.emotional_state = 'Somewhat anxious'
-            user_state.stress_level = 'Elevated'
-        elif 'confident' in text_lower or 'calm' in text_lower:
-            user_state.emotional_state = 'Confident and composed'
-            user_state.stress_level = 'Low'
+            # Create UserState object
+            user_state = UserState(
+                emotional_state=state_data.get('emotional_state', ''),
+                stress_level=state_data.get('stress_level', ''),
+                patience_level=state_data.get('patience_level', ''),
+                confidence_level=state_data.get('confidence_level', ''),
+                current_mood=state_data.get('current_mood', ''),
+                physical_state=state_data.get('physical_state', ''),
+                cognitive_load=state_data.get('cognitive_load', ''),
+                situational_factors=state_data.get('situational_factors', {})
+            )
+            
+            return user_state
         else:
-            user_state.emotional_state = 'Neutral but focused'
-            user_state.stress_level = 'Moderate'
-        
-        # Extract patience indicators
-        if 'impatient' in text_lower or 'hurry' in text_lower:
-            user_state.patience_level = 'Low - time pressure'
-        elif 'patient' in text_lower or 'calm' in text_lower:
-            user_state.patience_level = 'High - willing to work through issues'
-        else:
-            user_state.patience_level = 'Moderate - reasonable expectations'
-        
-        # Set defaults
-        user_state.confidence_level = 'Moderate confidence in technology and services'
-        user_state.current_mood = 'Professional and task-focused'
-        user_state.physical_state = 'Alert and comfortable'
-        user_state.cognitive_load = 'Medium - can handle standard complexity'
-        user_state.situational_factors = {
-            'urgency_perception': 'Moderate',
-            'environmental_comfort': 'Comfortable',
-            'task_confidence': 'Confident in completing service task'
-        }
-        
-        return user_state
-    
-    def _create_fallback_state(self, personality_data: Dict[str, Any], scenario_info: Dict[str, Any]) -> UserState:
-        """
-        Create basic fallback state when simulation fails
-        
-        Args:
-            personality_data: Personality trait information
-            scenario_info: Scenario context information
-            
-        Returns:
-            Basic UserState object based on available information
-        """
-        # Use available information to make educated guesses
-        big_five = personality_data.get('big_five', {}) if personality_data else {}
-        
-        # Determine emotional state based on neuroticism and scenario
-        neuroticism = big_five.get('N', 0.5)
-        urgency = scenario_info.get('urgency_level', 'Moderate') if scenario_info else 'Moderate'
-        
-        if neuroticism > 0.6 or urgency == 'High':
-            emotional_state = 'Somewhat stressed but manageable'
-            stress_level = 'Elevated due to situation demands'
-        elif neuroticism < 0.4 and urgency == 'Low':
-            emotional_state = 'Calm and composed'
-            stress_level = 'Low - comfortable with situation'
-        else:
-            emotional_state = 'Focused and alert'
-            stress_level = 'Moderate - normal service interaction stress'
-        
-        # Determine patience based on conscientiousness and scenario
-        conscientiousness = big_five.get('C', 0.5)
-        patience_level = 'High - methodical approach' if conscientiousness > 0.6 else 'Moderate - balanced expectations'
-        
-        # Determine confidence based on extraversion
-        extraversion = big_five.get('E', 0.5)
-        confidence_level = 'High - comfortable with interaction' if extraversion > 0.6 else 'Moderate - standard confidence'
-        
-        return UserState(
-            emotional_state=emotional_state,
-            stress_level=stress_level,
-            patience_level=patience_level,
-            confidence_level=confidence_level,
-            current_mood='Professional and task-oriented',
-            physical_state='Alert and engaged',
-            cognitive_load='Medium - can handle standard service complexity',
-            situational_factors={
-                'urgency_perception': urgency,
-                'environmental_comfort': 'Comfortable with service environment',
-                'task_confidence': 'Confident in completing service task',
-                'fallback': True
-            }
-        )
+            raise ValueError("No valid JSON found in response")

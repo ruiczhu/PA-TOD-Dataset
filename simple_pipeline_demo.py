@@ -5,9 +5,6 @@ Simple example demonstrating the streamlined TransformationPipeline usage
 import sys
 import os
 
-# Add MPEAF directory to Python path
-sys.path.append(os.path.join(os.path.dirname(__file__), 'MPEAF'))
-
 def main():
     """Demonstrate simplified pipeline usage"""
     print("=== Simplified Transformation Pipeline Demo ===")

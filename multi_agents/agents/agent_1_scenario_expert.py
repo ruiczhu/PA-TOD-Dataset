@@ -10,11 +10,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 
-# Import utilities with proper path handling
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from multi_agents.utils.llm_interface import LLMInterface
 from multi_agents.utils.data_structures import ScenarioInfo, EnhancedDialogue
 
@@ -96,8 +91,7 @@ Key expertise areas:
                 
         except Exception as e:
             self.logger.error(f"Failed to generate scenario for dialogue {dialogue.get('dialogue_id', 'unknown')}: {str(e)}")
-            # Return basic scenario as fallback
-            return self._create_fallback_scenario(dialogue)
+            raise
     
     def _extract_dialogue_context(self, dialogue: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -309,77 +303,4 @@ Focus on creating a realistic, coherent scenario that would naturally lead to th
                 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             self.logger.warning(f"Failed to parse scenario response: {str(e)}")
-            # Create basic scenario from response text
-            return self._extract_scenario_from_text(response_content)
-    
-    def _extract_scenario_from_text(self, text: str) -> ScenarioInfo:
-        """
-        Extract scenario information from free text when JSON parsing fails
-        
-        Args:
-            text: Raw text response
-            
-        Returns:
-            ScenarioInfo object with extracted information
-        """
-        # Basic text parsing as fallback
-        scenario_info = ScenarioInfo()
-        
-        text_lower = text.lower()
-        
-        # Simple keyword-based extraction
-        if 'restaurant' in text_lower:
-            scenario_info.location = 'Restaurant area'
-        elif 'hotel' in text_lower:
-            scenario_info.location = 'Hotel/accommodation area'
-        elif 'travel' in text_lower or 'flight' in text_lower:
-            scenario_info.location = 'Travel/transportation hub'
-        else:
-            scenario_info.location = 'Urban service area'
-        
-        if 'evening' in text_lower or 'night' in text_lower:
-            scenario_info.time_of_day = 'Evening'
-        elif 'morning' in text_lower:
-            scenario_info.time_of_day = 'Morning'
-        else:
-            scenario_info.time_of_day = 'Business hours'
-        
-        if 'urgent' in text_lower or 'emergency' in text_lower:
-            scenario_info.urgency_level = 'High'
-        else:
-            scenario_info.urgency_level = 'Moderate'
-        
-        scenario_info.country = 'United States'  # Default
-        scenario_info.crowd_level = 'Moderate'
-        scenario_info.business_hours = 'Regular business hours'
-        scenario_info.service_complexity = 'Medium'
-        
-        return scenario_info
-    
-    def _create_fallback_scenario(self, dialogue: Dict[str, Any]) -> ScenarioInfo:
-        """
-        Create basic fallback scenario when generation fails
-        
-        Args:
-            dialogue: Original dialogue data
-            
-        Returns:
-            Basic ScenarioInfo object
-        """
-        services = dialogue.get('services', [])
-        service_type = services[0] if services else 'general'
-        
-        return ScenarioInfo(
-            location=f"{service_type.title()} service location",
-            country="United States",
-            weather="Moderate weather conditions",
-            crowd_level="Moderate",
-            time_of_day="Business hours",
-            business_hours="Regular operating hours",
-            urgency_level="Moderate",
-            service_complexity="Medium",
-            additional_context={
-                "fallback": True,
-                "reason": "Scenario generation failed, using default values"
-            }
-        )
+            raise

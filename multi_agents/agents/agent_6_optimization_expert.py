@@ -10,11 +10,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional, Tuple
 
-# Import utilities with proper path handling
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from multi_agents.utils.llm_interface import LLMInterface
 
 
@@ -92,17 +87,16 @@ Quality standards:
         Raises:
             Exception: If optimization fails
         """
-        try:
-            # Analyze optimization needs
-            optimization_analysis = self._analyze_optimization_needs(
-                original_personality, evaluation_results
-            )
-            
-            if not optimization_analysis['needs_optimization']:
-                self.logger.info("Dialogue already meets quality thresholds - no optimization needed")
-                return self._add_optimization_metadata(transformed_dialogue, optimization_analysis, optimized=False)
-            
-            # Create optimization prompt
+        # Analyze optimization needs
+        optimization_analysis = self._analyze_optimization_needs(
+            original_personality, evaluation_results
+        )
+        
+        if not optimization_analysis['needs_optimization']:
+            self.logger.info("Dialogue already meets quality thresholds - no optimization needed")
+            return transformed_dialogue
+        
+        # Create optimization prompt
             optimization_prompt = self._create_optimization_prompt(
                 transformed_dialogue, original_personality, evaluation_results, 
                 optimization_analysis, optimization_strategy
@@ -126,68 +120,6 @@ Quality standards:
                 return optimized_dialogue
             else:
                 raise Exception("LLM call failed for dialogue optimization")
-                
-        except Exception as e:
-            self.logger.error(f"Failed to optimize dialogue: {str(e)}")
-            return self._create_fallback_optimization(transformed_dialogue, optimization_analysis)
-    
-    def perform_multi_iteration_optimization(self,
-                                           transformed_dialogue: Dict[str, Any],
-                                           original_personality: Dict[str, Any],
-                                           max_iterations: int = 3,
-                                           target_accuracy: float = 0.8) -> Dict[str, Any]:
-        """
-        Perform multiple optimization iterations until target quality is reached
-        
-        Args:
-            transformed_dialogue: Initial transformed dialogue
-            original_personality: Target personality profile
-            max_iterations: Maximum optimization iterations
-            target_accuracy: Target accuracy threshold
-            
-        Returns:
-            Final optimized dialogue after iterative improvement
-        """
-        current_dialogue = transformed_dialogue
-        optimization_history = []
-        
-        for iteration in range(max_iterations):
-            self.logger.info(f"Starting optimization iteration {iteration + 1}/{max_iterations}")
-            
-            # This would normally call the evaluation agent, but for now we'll simulate
-            # In a full implementation, this would integrate with Agent 5
-            mock_evaluation = self._create_mock_evaluation_for_optimization()
-            
-            # Perform optimization
-            optimized_dialogue = self.optimize_dialogue(
-                current_dialogue, original_personality, mock_evaluation,
-                optimization_strategy="targeted" if iteration < max_iterations - 1 else "comprehensive"
-            )
-            
-            # Track optimization history
-            optimization_history.append({
-                'iteration': iteration + 1,
-                'optimization_applied': optimized_dialogue.get('optimization_metadata', {}).get('optimized', False),
-                'improvements_made': optimized_dialogue.get('optimization_metadata', {}).get('optimization_summary', {})
-            })
-            
-            # Check if we've reached target quality (mock check for now)
-            current_accuracy = 0.7 + (iteration * 0.1)  # Mock improvement
-            if current_accuracy >= target_accuracy:
-                self.logger.info(f"Target accuracy {target_accuracy} reached in iteration {iteration + 1}")
-                break
-            
-            current_dialogue = optimized_dialogue
-        
-        # Add multi-iteration metadata
-        current_dialogue['multi_iteration_metadata'] = {
-            'total_iterations': len(optimization_history),
-            'final_accuracy': current_accuracy,
-            'optimization_history': optimization_history,
-            'target_reached': current_accuracy >= target_accuracy
-        }
-        
-        return current_dialogue
     
     def _analyze_optimization_needs(self,
                                   original_personality: Dict[str, Any],
@@ -530,133 +462,29 @@ Focus on creating targeted improvements that enhance personality expression whil
         Returns:
             Optimized dialogue structure
         """
-        try:
-            # Extract JSON from response
-            response_content = response_content.strip()
-            start_idx = response_content.find('{')
-            end_idx = response_content.rfind('}') + 1
+        # Extract JSON from response
+        response_content = response_content.strip()
+        start_idx = response_content.find('{')
+        end_idx = response_content.rfind('}') + 1
+        
+        if start_idx >= 0 and end_idx > start_idx:
+            json_content = response_content[start_idx:end_idx]
+            optimization_data = json.loads(json_content)
             
-            if start_idx >= 0 and end_idx > start_idx:
-                json_content = response_content[start_idx:end_idx]
-                optimization_data = json.loads(json_content)
-                
-                # Create optimized dialogue structure
-                optimized_dialogue = dict(original_dialogue)  # Copy original
-                optimized_dialogue.update({
-                    'optimized_turns': optimization_data.get('optimized_turns', []),
-                    'optimization_metadata': {
-                        'agent': self.agent_name,
-                        'optimization_summary': optimization_data.get('optimization_summary', {}),
-                        'quality_assessment': optimization_data.get('quality_assessment', {}),
-                        'optimization_analysis': optimization_analysis,
-                        'optimized': True
-                    }
-                })
-                
-                return optimized_dialogue
-                
-            else:
-                raise ValueError("No valid JSON found in optimization response")
-                
-        except (json.JSONDecodeError, KeyError, ValueError) as e:
-            self.logger.warning(f"Failed to parse optimization response: {str(e)}")
-            return self._extract_optimization_from_text(response_content, original_dialogue, optimization_analysis)
-    
-    def _extract_optimization_from_text(self,
-                                      text: str,
-                                      original_dialogue: Dict[str, Any],
-                                      optimization_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """Extract optimization from free text when JSON parsing fails"""
-        # Try to extract optimized turns from text
-        lines = text.split('\n')
-        optimized_turns = []
-        
-        current_turn = None
-        for line in lines:
-            line = line.strip()
+            # Create optimized dialogue structure
+            optimized_dialogue = dict(original_dialogue)  # Copy original
+            optimized_dialogue.update({
+                'optimized_turns': optimization_data.get('optimized_turns', []),
+                'optimization_metadata': {
+                    'agent': self.agent_name,
+                    'optimization_summary': optimization_data.get('optimization_summary', {}),
+                    'quality_assessment': optimization_data.get('quality_assessment', {}),
+                    'optimization_analysis': optimization_analysis,
+                    'optimized': True
+                }
+            })
             
-            # Look for turn indicators
-            if ('USER:' in line or 'SYSTEM:' in line or 
-                'Turn' in line and ':' in line):
-                
-                if current_turn:
-                    optimized_turns.append(current_turn)
-                
-                # Extract speaker and utterance
-                if 'USER:' in line:
-                    utterance = line.split('USER:', 1)[1].strip()
-                    current_turn = {
-                        'turn_index': len(optimized_turns),
-                        'speaker': 'USER',
-                        'optimized_utterance': utterance,
-                        'optimization_changes': ['Extracted from text'],
-                        'personality_improvements': ['Unknown']
-                    }
-                elif 'SYSTEM:' in line:
-                    utterance = line.split('SYSTEM:', 1)[1].strip()
-                    current_turn = {
-                        'turn_index': len(optimized_turns),
-                        'speaker': 'SYSTEM',
-                        'optimized_utterance': utterance,
-                        'optimization_changes': ['Extracted from text'],
-                        'personality_improvements': ['Unknown']
-                    }
-        
-        if current_turn:
-            optimized_turns.append(current_turn)
-        
-        # Create fallback structure
-        optimized_dialogue = dict(original_dialogue)
-        optimized_dialogue.update({
-            'optimized_turns': optimized_turns if optimized_turns else [],
-            'optimization_metadata': {
-                'agent': self.agent_name,
-                'optimization_analysis': optimization_analysis,
-                'optimized': len(optimized_turns) > 0,
-                'fallback_used': True,
-                'optimization_success': False
-            }
-        })
-        
-        return optimized_dialogue
-    
-    def _add_optimization_metadata(self,
-                                 dialogue: Dict[str, Any],
-                                 optimization_analysis: Dict[str, Any],
-                                 optimized: bool = True) -> Dict[str, Any]:
-        """Add optimization metadata to dialogue"""
-        dialogue_copy = dict(dialogue)
-        dialogue_copy['optimization_metadata'] = {
-            'agent': self.agent_name,
-            'optimization_analysis': optimization_analysis,
-            'optimized': optimized,
-            'optimization_needed': optimization_analysis.get('needs_optimization', False)
-        }
-        return dialogue_copy
-    
-    def _create_fallback_optimization(self,
-                                    original_dialogue: Dict[str, Any],
-                                    optimization_analysis: Dict[str, Any]) -> Dict[str, Any]:
-        """Create fallback optimization when LLM call fails"""
-        return self._add_optimization_metadata(
-            original_dialogue, optimization_analysis, optimized=False
-        )
-    
-    def _create_mock_evaluation_for_optimization(self) -> Dict[str, Any]:
-        """Create mock evaluation results for testing optimization iterations"""
-        return {
-            'big_five_scores': {
-                'openness': 0.6,
-                'conscientiousness': 0.5,
-                'extraversion': 0.7,
-                'agreeableness': 0.8,
-                'neuroticism': 0.4
-            },
-            'overall_assessment': {
-                'personality_summary': 'Moderate personality expression with room for improvement',
-                'authenticity_assessment': 'Generally authentic but could be enhanced'
-            },
-            'evaluation_metadata': {
-                'evaluation_confidence': 'Medium'
-            }
-        }
+            return optimized_dialogue
+            
+        else:
+            raise ValueError("No valid JSON found in optimization response")

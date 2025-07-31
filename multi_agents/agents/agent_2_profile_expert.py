@@ -10,11 +10,6 @@ import json
 import logging
 from typing import Dict, List, Any, Optional
 
-# Import utilities with proper path handling
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from multi_agents.utils.llm_interface import LLMInterface
 from multi_agents.utils.data_structures import UserProfile, EnhancedDialogue
 
@@ -104,16 +99,7 @@ Key expertise areas:
             
         except Exception as e:
             self.logger.error(f"Failed to generate complete profile: {str(e)}")
-            # Return fallback data
-            fallback_personality = {
-                'big_five': {'O': 0.5, 'C': 0.5, 'E': 0.5, 'A': 0.5, 'N': 0.5},
-                'facets': {}
-            }
-            fallback_profile = self._create_fallback_profile(fallback_personality)
-            return {
-                'personality_data': fallback_personality,
-                'user_profile': fallback_profile
-            }
+            raise
     
     def generate_profile(self, personality_data: Dict[str, Any], dialogue_context: Dict[str, Any] = None) -> UserProfile:
         """
@@ -152,8 +138,7 @@ Key expertise areas:
                 
         except Exception as e:
             self.logger.error(f"Failed to generate user profile: {str(e)}")
-            # Return basic profile as fallback
-            return self._create_fallback_profile(personality_data)
+            raise
     
     def _create_profile_prompt(self, personality_data: Dict[str, Any], dialogue_context: Dict[str, Any] = None) -> str:
         """
@@ -349,111 +334,7 @@ Ensure the profile is internally consistent and realistically reflects how someo
                 
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             self.logger.warning(f"Failed to parse profile response: {str(e)}")
-            # Create basic profile from response text
-            return self._extract_profile_from_text(response_content)
-    
-    def _extract_profile_from_text(self, text: str) -> UserProfile:
-        """
-        Extract profile information from free text when JSON parsing fails
-        
-        Args:
-            text: Raw text response
-            
-        Returns:
-            UserProfile object with extracted information
-        """
-        # Basic text parsing as fallback
-        user_profile = UserProfile()
-        
-        text_lower = text.lower()
-        
-        # Extract age if mentioned
-        if '20s' in text_lower or 'twenties' in text_lower:
-            user_profile.age_range = '25-29 years old'
-        elif '30s' in text_lower or 'thirties' in text_lower:
-            user_profile.age_range = '30-35 years old'
-        else:
-            user_profile.age_range = '25-40 years old'
-        
-        # Extract occupation hints
-        if 'manager' in text_lower:
-            user_profile.occupation = 'Manager in service industry'
-        elif 'professional' in text_lower:
-            user_profile.occupation = 'Professional worker'
-        else:
-            user_profile.occupation = 'Service industry professional'
-        
-        # Set default values
-        user_profile.education_level = 'College educated'
-        user_profile.tech_savviness = 'Moderate technology user'
-        user_profile.communication_style = 'Clear and direct communication'
-        user_profile.background = 'Working professional with service interaction experience'
-        user_profile.motivations = ['Efficient service', 'Quality results', 'Professional interaction']
-        user_profile.preferences = {
-            'service_style': 'Professional and efficient',
-            'information_detail': 'Clear and sufficient detail',
-            'social_interaction': 'Polite and task-focused'
-        }
-        
-        return user_profile
-    
-    def _create_fallback_profile(self, personality_data: Dict[str, Any]) -> UserProfile:
-        """
-        Create basic fallback profile when generation fails
-        
-        Args:
-            personality_data: Personality trait information
-            
-        Returns:
-            Basic UserProfile object based on personality
-        """
-        # Use personality data to make educated guesses
-        big_five = personality_data.get('big_five', {})
-        
-        # Determine characteristics based on personality scores
-        openness = big_five.get('O', 0.5)
-        conscientiousness = big_five.get('C', 0.5)
-        extraversion = big_five.get('E', 0.5)
-        
-        # Age based on conscientiousness and openness
-        if conscientiousness > 0.6:
-            age_range = '30-40 years old'  # More mature, established
-        elif openness > 0.6:
-            age_range = '25-32 years old'  # Younger, more exploratory
-        else:
-            age_range = '25-35 years old'
-        
-        # Occupation based on traits
-        if conscientiousness > 0.6 and extraversion > 0.6:
-            occupation = 'Management or leadership role'
-        elif openness > 0.6:
-            occupation = 'Creative or analytical professional'
-        else:
-            occupation = 'Service industry professional'
-        
-        # Communication style based on extraversion
-        if extraversion > 0.6:
-            communication_style = 'Outgoing and expressive'
-        elif extraversion < 0.4:
-            communication_style = 'Reserved and thoughtful'
-        else:
-            communication_style = 'Balanced and adaptive'
-        
-        return UserProfile(
-            age_range=age_range,
-            occupation=occupation,
-            education_level='College educated',
-            tech_savviness='Moderate technology user',
-            communication_style=communication_style,
-            background='Working professional with diverse service interaction experience',
-            motivations=['Effective service delivery', 'Professional interaction', 'Quality outcomes'],
-            preferences={
-                'service_style': 'Professional and courteous',
-                'information_detail': 'Adequate detail for decision making',
-                'social_interaction': 'Respectful and efficient',
-                'fallback': True
-            }
-        )
+            raise
     
     def _generate_personality_from_dialogue(self, dialogue: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -540,37 +421,9 @@ Format as JSON with this structure:
                     
                     self.logger.warning(f"Failed to parse LLM personality response as JSON: {content[:200]}...")
             
-            # Fallback to default personality
-            self.logger.info("Using default personality data due to parsing failure")
-            return self._get_default_personality()
+            # No fallback - raise error to surface parsing issues
+            raise ValueError("Failed to parse personality data from LLM response")
             
         except Exception as e:
             self.logger.error(f"Error generating personality from dialogue: {str(e)}")
-            return self._get_default_personality()
-    
-    def _get_default_personality(self) -> Dict[str, Any]:
-        """
-        Generate default/neutral personality data
-        
-        Returns:
-            Default personality data structure
-        """
-        return {
-            'big_five': {
-                'O': 0.5,  # Neutral openness
-                'C': 0.6,  # Slightly organized
-                'E': 0.5,  # Neutral extraversion
-                'A': 0.7,  # Somewhat agreeable
-                'N': 0.4   # Low neuroticism
-            },
-            'facets': {
-                'dominant_facets': ['C2_Order', 'A3_Altruism'],
-                'explanations': {
-                    'O': 'Moderate openness based on standard dialogue patterns',
-                    'C': 'Organized approach to service requests',
-                    'E': 'Balanced social interaction style',
-                    'A': 'Cooperative and polite communication',
-                    'N': 'Calm and stable emotional tone'
-                }
-            }
-        }
+            raise
