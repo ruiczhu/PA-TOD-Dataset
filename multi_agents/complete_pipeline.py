@@ -24,7 +24,6 @@ from multi_agents.agents.agent_6_optimization_expert import OptimizationExpert
 from multi_agents.utils.llm_interface import LLMInterface
 from multi_agents.utils.data_structures import ProcessingStage, EnhancedDialogue
 from multi_agents.data_manager import DataManager
-from multi_agents.visualization import VisualizationManager
 
 # Import MPEAF components
 from MPEAF.dialogue_loader import DialogueLoader
@@ -46,8 +45,10 @@ class CompletePipeline:
         
         Args:
             config: Configuration dictionary for pipeline settings
+                   - random_seed: Optional random seed for reproducible results
         """
         self.config = config or {}
+        self.random_seed = self.config.get('random_seed', None)
         self.logger = logging.getLogger(__name__)
         
         # Initialize LLM interface (shared across agents)
@@ -63,7 +64,6 @@ class CompletePipeline:
         
         # Initialize supporting systems
         self.data_manager = DataManager()
-        self.visualization_manager = VisualizationManager()
         
         # Initialize MPEAF components
         self.personality_framework = PersonalityFramework()
@@ -83,9 +83,8 @@ class CompletePipeline:
                             input_data_path: str,
                             output_directory: str,
                             batch_size: int = 10,
-                            max_iterations: int = 2,
-                            target_quality: float = 0.8,
-                            max_dialogues: Optional[int] = None) -> Dict[str, Any]:
+                            max_dialogues: Optional[int] = None,
+                            random_seed: Optional[int] = None) -> Dict[str, Any]:
         """
         Execute the complete 18-step pipeline on input dialogue data
         
@@ -93,9 +92,8 @@ class CompletePipeline:
             input_data_path: Path to input dialogue data
             output_directory: Directory for output files
             batch_size: Number of dialogues to process in each batch
-            max_iterations: Maximum optimization iterations per dialogue
-            target_quality: Target quality threshold for optimization
             max_dialogues: Maximum number of dialogues to process (None for all)
+            random_seed: Random seed for reproducible dialogue selection (overrides config)
             
         Returns:
             Pipeline execution results and statistics
@@ -106,7 +104,9 @@ class CompletePipeline:
         try:
             # Step 1-2: Load and prepare data
             # Use max_dialogues as the loading limit if specified
-            dialogue_data = self._load_and_prepare_data(input_data_path, max_dialogues)
+            # Use provided random_seed or fall back to instance seed
+            seed_to_use = random_seed if random_seed is not None else self.random_seed
+            dialogue_data = self._load_and_prepare_data(input_data_path, max_dialogues, seed_to_use)
             
             # Step 3: Initialize batch processing
             enhanced_dialogues = self.data_manager.initialize_batch(dialogue_data)
@@ -132,9 +132,7 @@ class CompletePipeline:
                 for enhanced_dialogue in batch:
                     try:
                         # Process single dialogue through complete 18-step pipeline
-                        result = self._process_single_dialogue_complete(
-                            enhanced_dialogue, max_iterations, target_quality
-                        )
+                        result = self._process_single_dialogue_complete(enhanced_dialogue)
                         batch_results.append(result)
                         
                         if result.get('success', False):
@@ -168,9 +166,7 @@ class CompletePipeline:
             return {'success': False, 'error': str(e), 'statistics': self.pipeline_stats}
     
     def _process_single_dialogue_complete(self,
-                                        enhanced_dialogue: EnhancedDialogue,
-                                        max_iterations: int,
-                                        target_quality: float) -> Dict[str, Any]:
+                                        enhanced_dialogue: EnhancedDialogue) -> Dict[str, Any]:
         """
         Process a single dialogue through the complete 18-step pipeline
         
@@ -196,8 +192,6 @@ class CompletePipeline:
         
         Args:
             enhanced_dialogue: Enhanced dialogue object to process
-            max_iterations: Maximum optimization iterations
-            target_quality: Target quality threshold
             
         Returns:
             Complete processing results for the dialogue
@@ -267,26 +261,53 @@ class CompletePipeline:
             self.data_manager.update_dialogue_stage(enhanced_dialogue, ProcessingStage.OPTIMIZATION)
             self.logger.info(f"Step 15-17: Optimization for {dialogue_id}")
             
-            # Perform iterative optimization if needed
-            if max_iterations > 1:
-                final_dialogue = self.optimization_expert.perform_multi_iteration_optimization(
-                    transformed_dialogue,
-                    profile_results.get('personality_data', {}),
-                    max_iterations,
-                    target_quality
-                )
-            else:
-                final_dialogue = self.optimization_expert.optimize_dialogue(
-                    transformed_dialogue,
-                    profile_results.get('personality_data', {}),
-                    evaluation_results
-                )
-            
-            # STEP 18: Final Quality Assessment
-            self.logger.info(f"Step 18: Final quality validation for {dialogue_id}")
-            transformation_quality = self.personality_evaluator.evaluate_transformation_quality(
+            # Perform optimization
+            final_dialogue = self.optimization_expert.optimize_dialogue(
+                transformed_dialogue,
                 profile_results.get('personality_data', {}),
                 evaluation_results
+            )
+            
+            # STEP 18: Final Quality Assessment with optimized dialogue evaluation
+            self.logger.info(f"Step 18: Final quality validation for {dialogue_id}")
+            
+            # Check if A6 actually produced an optimized dialogue
+            optimized_evaluation = None
+            optimization_successful = False
+            
+            if final_dialogue:
+                # Check if A6 optimization was successful based on metadata
+                optimization_metadata = final_dialogue.get('optimization_metadata', {})
+                optimization_was_successful = optimization_metadata.get('optimized', False)
+                
+                # Also check if there are actual optimized_turns with content
+                optimized_turns = final_dialogue.get('optimized_turns', [])
+                has_optimized_content = False
+                
+                if optimized_turns and len(optimized_turns) > 0:
+                    # Verify optimized turns contain optimized_utterance
+                    has_optimized_content = any(
+                        turn.get('optimized_utterance') for turn in optimized_turns
+                    )
+                
+                if optimization_was_successful and has_optimized_content:
+                    optimization_successful = True
+                    # A5 evaluates A6's optimized dialogue
+                    optimized_evaluation = self.personality_evaluator.evaluate_personality_blind(
+                        final_dialogue, dialogue_dict
+                    )
+                    self.logger.info(f"Optimized dialogue evaluated by A5 - optimization successful")
+                else:
+                    error_msg = optimization_metadata.get('error', 'Unknown error')
+                    self.logger.warning(f"A6 optimization failed: {error_msg}")
+            else:
+                self.logger.error(f"A6 returned None for final_dialogue")
+            
+            # Compare all three: original personality, transformed evaluation, optimized evaluation
+            transformation_quality = self.personality_evaluator.evaluate_transformation_quality(
+                profile_results.get('personality_data', {}),
+                evaluation_results,
+                optimized_evaluation
             )
             
             # Mark as completed
@@ -299,6 +320,7 @@ class CompletePipeline:
                 'dialogue_id': dialogue_id,
                 'success': True,
                 'processing_time': processing_time,
+                'optimization_successful': optimization_successful,  # Add optimization status
                 'step_results': {
                     'step_1_3_data_preparation': {'status': 'completed', 'data': dialogue_dict},
                     'step_4_6_scenario_analysis': {'status': 'completed', 'data': scenario_info.__dict__ if hasattr(scenario_info, '__dict__') else scenario_info},
@@ -306,7 +328,7 @@ class CompletePipeline:
                     'step_9_11_state_simulation': {'status': 'completed', 'data': user_state.__dict__ if hasattr(user_state, '__dict__') else user_state},
                     'step_12_transformation': {'status': 'completed', 'data': transformed_dialogue},
                     'step_13_14_evaluation': {'status': 'completed', 'data': evaluation_results},
-                    'step_15_17_optimization': {'status': 'completed', 'data': final_dialogue},
+                    'step_15_17_optimization': {'status': 'completed' if optimization_successful else 'failed', 'data': final_dialogue},
                     'step_18_final_validation': {'status': 'completed', 'data': transformation_quality}
                 },
                 'final_output': {
@@ -344,13 +366,15 @@ class CompletePipeline:
                 'step_results': {'error': 'Processing failed before completion'}
             }
     
-    def _load_and_prepare_data(self, input_path: str, max_dialogues_to_load: Optional[int] = None) -> List[Dict[str, Any]]:
+    def _load_and_prepare_data(self, input_path: str, max_dialogues_to_load: Optional[int] = None, 
+                              random_seed: Optional[int] = None) -> List[Dict[str, Any]]:
         """
         Load and prepare dialogue data for processing
         
         Args:
             input_path: Path to input data
             max_dialogues_to_load: Maximum number of dialogues to load from directory (None for default)
+            random_seed: Random seed for reproducible dialogue selection
             
         Returns:
             List of prepared dialogue dictionaries
@@ -370,8 +394,9 @@ class CompletePipeline:
                 dialogue_loader = DialogueLoader(data_dir=input_path, load_all=True)
                 # Use custom count if specified, otherwise use reasonable default
                 load_count = max_dialogues_to_load if max_dialogues_to_load is not None else 50
-                dialogue_data = dialogue_loader.get_random_dialogues(count=load_count)
-                self.logger.info(f"Loaded {len(dialogue_data)} dialogues from directory (requested: {load_count})")
+                dialogue_data = dialogue_loader.get_random_dialogues(count=load_count, random_seed=random_seed)
+                seed_info = f" with seed {random_seed}" if random_seed is not None else ""
+                self.logger.info(f"Loaded {len(dialogue_data)} dialogues from directory (requested: {load_count}){seed_info}")
             
             # Convert to standard format if needed
             prepared_data = []
@@ -425,9 +450,6 @@ class CompletePipeline:
         # Save individual results
         self._save_individual_results(successful_results, output_directory)
         
-        # Generate visualizations
-        visualization_paths = self._generate_visualizations(successful_results, output_directory)
-        
         # Save comprehensive pipeline summary
         pipeline_summary = {
             'pipeline_execution': {
@@ -450,11 +472,9 @@ class CompletePipeline:
                 'step_18': 'Final Quality Validation'
             },
             'quality_metrics': summary_stats.get('quality_metrics', {}),
-            'agent_performance': summary_stats.get('agent_performance', {}),
             'output_files': {
                 'individual_results': 'complete_transformed_dialogues.json',
-                'summary_report': 'complete_pipeline_summary.json',
-                'visualizations': visualization_paths
+                'summary_report': 'complete_pipeline_summary.json'
             },
             'pipeline_configuration': {
                 'total_agents': 6,
@@ -500,37 +520,13 @@ class CompletePipeline:
         
         avg_quality = sum(quality_scores) / len(quality_scores) if quality_scores else 0
         
-        # Step completion tracking
-        step_completion = {}
-        for step in ['step_4_6_scenario_analysis', 'step_7_8_personality_profiling', 
-                    'step_9_11_state_simulation', 'step_12_transformation',
-                    'step_13_14_evaluation', 'step_15_17_optimization', 'step_18_final_validation']:
-            completed = sum(1 for r in successful_results 
-                          if r.get('step_results', {}).get(step, {}).get('status') == 'completed')
-            step_completion[step] = {
-                'completed': completed,
-                'success_rate': completed / len(successful_results) if successful_results else 0
-            }
-        
-        # Agent performance tracking
-        agent_performance = {
-            'scenario_expert_success': sum(1 for r in successful_results if 'scenario_analysis' in r.get('final_output', {})),
-            'profile_expert_success': sum(1 for r in successful_results if 'profile_results' in r.get('final_output', {})),
-            'simulation_expert_success': sum(1 for r in successful_results if 'user_state' in r.get('final_output', {})),
-            'transformation_expert_success': sum(1 for r in successful_results if 'transformed_dialogue' in r.get('final_output', {})),
-            'personality_evaluator_success': sum(1 for r in successful_results if 'evaluation_results' in r.get('final_output', {})),
-            'optimization_expert_success': sum(1 for r in successful_results if 'final_optimized_dialogue' in r.get('final_output', {}))
-        }
-        
         return {
             'average_processing_time': avg_processing_time,
-            'step_completion_rates': step_completion,
             'quality_metrics': {
                 'average_transformation_quality': avg_quality,
                 'quality_scores_available': len(quality_scores),
                 'high_quality_transformations': sum(1 for q in quality_scores if q >= 0.7)
-            },
-            'agent_performance': agent_performance
+            }
         }
     
     def _save_individual_results(self, successful_results: List[Dict[str, Any]], output_directory: str):
@@ -553,9 +549,6 @@ class CompletePipeline:
             original_dialogue = final_output.get('original_dialogue', {})
             services = original_dialogue.get('services', [])
             
-            # Simplify transformation_quality
-            simplified_quality = self._simplify_transformation_quality(final_output.get('transformation_quality', {}))
-            
             saved_result = {
                 'dialogue_id': result.get('dialogue_id'),
                 'processing_summary': {
@@ -568,12 +561,12 @@ class CompletePipeline:
                 'scenario_analysis': self._serialize_object(final_output.get('scenario_analysis')),
                 'personality_profiling': self._serialize_object(final_output.get('profile_results')),
                 'state_simulation': self._serialize_object(final_output.get('user_state')),
-                'transformation_quality': simplified_quality
+                'transformation_quality': final_output.get('transformation_quality', {})
             }
             saved_results.append(saved_result)
         
         with open(results_path, 'w', encoding='utf-8') as f:
-            json.dump(saved_results, f, indent=2, ensure_ascii=False, default=self._json_serializer)
+            json.dump(saved_results, f, indent=2, ensure_ascii=False, default=self._serialize_object)
         
         self.logger.info(f"Saved {len(saved_results)} complete transformation results to {results_path}")
     
@@ -596,7 +589,14 @@ class CompletePipeline:
         # Get turns from each dialogue
         original_turns = original_dialogue.get('turns', [])
         transformed_turns = transformed_dialogue.get('transformed_turns', [])
-        optimized_turns = optimized_dialogue.get('optimized_turns', []) if optimized_dialogue else []
+        
+        # Handle optimized dialogue - it might be in different formats
+        optimized_turns = []
+        if optimized_dialogue:
+            # Try different possible locations for optimized turns
+            optimized_turns = (optimized_dialogue.get('optimized_turns', []) or 
+                             optimized_dialogue.get('turns', []) or
+                             optimized_dialogue.get('dialogue_turns', []))
         
         # Create lookup dictionaries for transformed and optimized turns
         transformed_lookup = {turn.get('turn_index', i): turn for i, turn in enumerate(transformed_turns)}
@@ -610,6 +610,13 @@ class CompletePipeline:
             transformed_turn = transformed_lookup.get(turn_index, {})
             optimized_turn = optimized_lookup.get(turn_index, {})
             
+            # Extract optimized utterance with multiple fallback options
+            optimized_utterance = None
+            if optimized_turn:
+                optimized_utterance = (optimized_turn.get('optimized_utterance') or
+                                     optimized_turn.get('utterance') or
+                                     optimized_turn.get('text'))
+            
             # Create merged turn
             merged_turn = {
                 'turn_index': turn_index,
@@ -617,7 +624,7 @@ class CompletePipeline:
                 'utterance': original_turn.get('utterance'),
                 'transformed_utterance': transformed_turn.get('transformed_utterance', 
                                                             transformed_turn.get('original_utterance')),
-                'optimized_utterance': optimized_turn.get('optimized_utterance') if optimized_turn else None,
+                'optimized_utterance': optimized_utterance,
                 'frames': original_turn.get('frames', [])
             }
             
@@ -625,137 +632,30 @@ class CompletePipeline:
         
         return merged_turns
     
-    def _simplify_transformation_quality(self, transformation_quality: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        Simplify transformation quality to only include the three Big Five evaluations
-        
-        Args:
-            transformation_quality: Original transformation quality data
-            
-        Returns:
-            Simplified transformation quality with only Big Five scores
-        """
-        simplified_quality = {}
-        
-        # Extract personality_data (original Big Five) - try multiple sources
-        personality_data = {}
-        
-        # Method 1: From dimension_accuracy (old format)
-        if 'dimension_accuracy' in transformation_quality:
-            for dim, data in transformation_quality['dimension_accuracy'].items():
-                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
-                    key = dim[0].upper()  # Convert to O, C, E, A, N format
-                    personality_data[key] = data.get('original_score', 0)
-        
-        # Method 2: From direct big_five_scores (new format)
-        elif 'big_five_scores' in transformation_quality:
-            for dim, score in transformation_quality['big_five_scores'].items():
-                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
-                    key = dim[0].upper()  # Convert to O, C, E, A, N format
-                    personality_data[key] = score
-        
-        # Default values if no data found
-        if not personality_data:
-            personality_data = {"O": 0.4, "C": 0.7, "E": 0.3, "A": 0.5, "N": 0.2}
-        
-        simplified_quality['personality_data'] = personality_data
-        
-        # Extract transformed_big_five (evaluated scores after transformation)
-        transformed_big_five = {}
-        
-        # Method 1: From dimension_accuracy (old format)
-        if 'dimension_accuracy' in transformation_quality:
-            for dim, data in transformation_quality['dimension_accuracy'].items():
-                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
-                    key = dim[0].upper()  # Convert to O, C, E, A, N format
-                    transformed_big_five[key] = data.get('evaluated_score', personality_data.get(key, 0))
-        
-        # Method 2: From big_five_scores (new format)
-        elif 'big_five_scores' in transformation_quality:
-            for dim, score in transformation_quality['big_five_scores'].items():
-                if dim in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
-                    key = dim[0].upper()  # Convert to O, C, E, A, N format
-                    transformed_big_five[key] = score
-        
-        # Default to personality_data if no transformed scores
-        if not transformed_big_five:
-            transformed_big_five = personality_data.copy()
-        
-        simplified_quality['transformed_big_five'] = transformed_big_five
-        
-        # Extract optimized_big_five (scores after optimization, if available)
-        # For now, default to original personality_data (will be updated when optimization data is available)
-        optimized_big_five = personality_data.copy()
-        simplified_quality['optimized_big_five'] = optimized_big_five
-        
-        return simplified_quality
-    
     def _serialize_object(self, obj):
         """Convert objects to serializable format"""
         if obj is None:
             return None
         if hasattr(obj, '__dict__'):
             return obj.__dict__
+        elif hasattr(obj, 'to_dict'):
+            return obj.to_dict()
         elif isinstance(obj, dict):
             return {k: self._serialize_object(v) for k, v in obj.items()}
         elif isinstance(obj, list):
             return [self._serialize_object(item) for item in obj]
         else:
-            return obj
-    
-    def _json_serializer(self, obj):
-        """Custom JSON serializer for complex objects"""
-        if hasattr(obj, '__dict__'):
-            return obj.__dict__
-        elif hasattr(obj, 'to_dict'):
-            return obj.to_dict()
-        else:
             return str(obj)
     
-    def _generate_visualizations(self, successful_results: List[Dict[str, Any]], output_directory: str) -> List[str]:
-        """Generate visualization outputs"""
-        try:
-            # Create visualizations subdirectory
-            viz_directory = os.path.join(output_directory, 'visualizations')
-            os.makedirs(viz_directory, exist_ok=True)
-            
-            visualization_paths = []
-            
-            # Generate processing flow visualization
-            flow_path = self.visualization_manager.create_processing_flow_chart(
-                len(successful_results), viz_directory
-            )
-            if flow_path:
-                visualization_paths.append(flow_path)
-            
-            # Generate quality metrics visualization
-            quality_data = []
-            for result in successful_results:
-                final_output = result.get('final_output', {})
-                quality_info = final_output.get('transformation_quality', {})
-                if 'average_accuracy' in quality_info:
-                    quality_data.append(quality_info)
-            
-            if quality_data:
-                quality_path = self.visualization_manager.create_quality_metrics_chart(
-                    quality_data, viz_directory
-                )
-                if quality_path:
-                    visualization_paths.append(quality_path)
-            
-            return visualization_paths
-            
-        except Exception as e:
-            self.logger.warning(f"Failed to generate visualizations: {str(e)}")
-            return []
-    
-    def run_demo_pipeline(self, sample_data_path: str = None, demo_dialogues_count: int = 3) -> Dict[str, Any]:
+    def run_demo_pipeline(self, sample_data_path: str = None, demo_dialogues_count: int = 3, 
+                         random_seed: Optional[int] = None) -> Dict[str, Any]:
         """
         Run a demonstration of the complete 18-step pipeline with sample data
         
         Args:
             sample_data_path: Path to sample data (uses default if None)
             demo_dialogues_count: Number of dialogues to process in demo
+            random_seed: Random seed for reproducible dialogue selection
             
         Returns:
             Demo execution results
@@ -780,7 +680,6 @@ class CompletePipeline:
             input_data_path=sample_data_path,
             output_directory=demo_output,
             batch_size=min(demo_dialogues_count, 3),  # Small batch for demo
-            max_iterations=2,
-            target_quality=0.7,
-            max_dialogues=demo_dialogues_count  # Use the specified count
+            max_dialogues=demo_dialogues_count,  # Use the specified count
+            random_seed=random_seed  # Pass through the random seed
         )

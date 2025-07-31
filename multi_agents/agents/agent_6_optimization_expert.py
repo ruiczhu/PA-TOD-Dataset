@@ -92,11 +92,12 @@ Quality standards:
             original_personality, evaluation_results
         )
         
-        if not optimization_analysis['needs_optimization']:
-            self.logger.info("Dialogue already meets quality thresholds - no optimization needed")
-            return transformed_dialogue
+        # Always perform optimization to generate optimized_utterances
+        # Even if quality is already good, we want to demonstrate the optimization capability
+        self.logger.info(f"Performing optimization (needs_optimization: {optimization_analysis['needs_optimization']})")
         
-        # Create optimization prompt
+        try:
+            # Create optimization prompt
             optimization_prompt = self._create_optimization_prompt(
                 transformed_dialogue, original_personality, evaluation_results, 
                 optimization_analysis, optimization_strategy
@@ -120,6 +121,18 @@ Quality standards:
                 return optimized_dialogue
             else:
                 raise Exception("LLM call failed for dialogue optimization")
+                
+        except Exception as e:
+            self.logger.error(f"Optimization failed: {str(e)}")
+            # Return original dialogue with optimization metadata
+            return {
+                **transformed_dialogue,
+                'optimization_metadata': {
+                    'agent': self.agent_name,
+                    'optimized': False,
+                    'error': str(e)
+                }
+            }
     
     def _analyze_optimization_needs(self,
                                   original_personality: Dict[str, Any],
@@ -471,16 +484,21 @@ Focus on creating targeted improvements that enhance personality expression whil
             json_content = response_content[start_idx:end_idx]
             optimization_data = json.loads(json_content)
             
+            # Check if we actually have optimized turns with content
+            optimized_turns = optimization_data.get('optimized_turns', [])
+            has_valid_optimized_content = bool(optimized_turns and 
+                                             any(turn.get('optimized_utterance') for turn in optimized_turns))
+            
             # Create optimized dialogue structure
             optimized_dialogue = dict(original_dialogue)  # Copy original
             optimized_dialogue.update({
-                'optimized_turns': optimization_data.get('optimized_turns', []),
+                'optimized_turns': optimized_turns,
                 'optimization_metadata': {
                     'agent': self.agent_name,
                     'optimization_summary': optimization_data.get('optimization_summary', {}),
                     'quality_assessment': optimization_data.get('quality_assessment', {}),
                     'optimization_analysis': optimization_analysis,
-                    'optimized': True
+                    'optimized': has_valid_optimized_content  # Only True if we have actual optimized content
                 }
             })
             

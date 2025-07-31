@@ -111,39 +111,58 @@ Big Five evaluation framework:
     
     def evaluate_transformation_quality(self,
                                        original_personality: Dict[str, Any],
-                                       evaluated_personality: Dict[str, Any]) -> Dict[str, Any]:
+                                       transformed_evaluation: Dict[str, Any],
+                                       optimized_evaluation: Dict[str, Any] = None) -> Dict[str, Any]:
         """
         Compare intended vs. evaluated personality to assess transformation quality
+        Return simplified Big Five format for output
         
         Args:
             original_personality: Intended personality profile
-            evaluated_personality: Blind evaluation results
+            transformed_evaluation: A5's evaluation of transformed dialogue
+            optimized_evaluation: A5's evaluation of A6-optimized dialogue (optional)
             
         Returns:
-            Transformation quality assessment
+            Simplified transformation quality assessment with Big Five scores
         """
         try:
             # Extract comparable personality scores
             original_big5 = original_personality.get('big_five', {})
-            evaluated_big5 = evaluated_personality.get('big_five_scores', {})
+            transformed_big5 = transformed_evaluation.get('big_five_scores', {})
             
-            if not original_big5 or not evaluated_big5:
+            if not original_big5 or not transformed_big5:
                 return {'error': 'Insufficient personality data for comparison'}
             
-            # Calculate accuracy metrics
-            quality_metrics = self._calculate_transformation_accuracy(original_big5, evaluated_big5)
+            # Convert string values to float for processing
+            def convert_to_float(scores_dict):
+                converted = {}
+                for key, value in scores_dict.items():
+                    try:
+                        converted[key] = float(value)
+                    except (ValueError, TypeError):
+                        converted[key] = 0.5  # Default value
+                return converted
             
-            # Assess overall transformation quality
-            overall_quality = self._assess_overall_quality(quality_metrics)
+            original_scores = convert_to_float(original_big5)
+            transformed_scores = convert_to_float(transformed_big5)
             
-            return {
-                'transformation_quality': overall_quality,
-                'dimension_accuracy': quality_metrics,
-                'evaluation_metadata': {
-                    'evaluator': self.agent_name,
-                    'comparison_method': 'Big Five correlation analysis'
-                }
+            # Extract optimized scores if available (A5's evaluation of A6's optimized dialogue)
+            optimized_scores = None
+            if optimized_evaluation:
+                optimized_big5 = optimized_evaluation.get('big_five_scores', {})
+                if optimized_big5:
+                    optimized_scores = convert_to_float(optimized_big5)
+            
+            result = {
+                'personality_data': original_scores,
+                'transformed_big_five': transformed_scores
             }
+            
+            # Only include optimized scores if they exist
+            if optimized_scores:
+                result['optimized_big_five'] = optimized_scores
+            
+            return result
             
         except Exception as e:
             self.logger.error(f"Failed to evaluate transformation quality: {str(e)}")
@@ -154,46 +173,107 @@ Big Five evaluation framework:
         Extract dialogue content for personality evaluation
         
         Args:
-            dialogue_data: Transformed dialogue data
+            dialogue_data: Transformed dialogue data (may include optimized_turns)
             
         Returns:
             List of dialogue turns for evaluation
         """
         evaluation_turns = []
         
-        # Handle transformed dialogue structure
-        if 'transformed_turns' in dialogue_data:
+        # Debug logging
+        self.logger.debug(f"Extracting dialogue for evaluation. Available keys: {list(dialogue_data.keys())}")
+        
+        # Priority 1: Handle optimized dialogue structure (when A6 has optimized the dialogue)
+        if 'optimized_turns' in dialogue_data:
+            self.logger.debug(f"Found optimized_turns with {len(dialogue_data['optimized_turns'])} turns")
+            for turn in dialogue_data['optimized_turns']:
+                if turn.get('speaker') == 'USER':  # Focus on user utterances for personality evaluation
+                    # Use optimized_utterance if available, fallback to original
+                    utterance = turn.get('optimized_utterance', turn.get('original_utterance', ''))
+                    if utterance:
+                        evaluation_turns.append({
+                            'turn_index': turn.get('turn_index', 0),
+                            'utterance': utterance,
+                            'speaker': 'USER'
+                        })
+            
+            # If we didn't get enough user turns from optimized_turns, supplement with transformed_turns
+            if len(evaluation_turns) < 3 and 'transformed_turns' in dialogue_data:
+                self.logger.debug(f"Only found {len(evaluation_turns)} user turns in optimized_turns, supplementing from transformed_turns")
+                used_indices = {turn['turn_index'] for turn in evaluation_turns}
+                
+                for turn in dialogue_data['transformed_turns']:
+                    if turn.get('speaker') == 'USER' and turn.get('turn_index') not in used_indices:
+                        utterance = turn.get('transformed_utterance', turn.get('utterance', ''))
+                        if utterance.strip():
+                            evaluation_turns.append({
+                                'turn_index': turn.get('turn_index', 0),
+                                'utterance': utterance,
+                                'speaker': 'USER'
+                            })
+                
+                # Sort by turn_index to maintain order
+                evaluation_turns.sort(key=lambda x: x['turn_index'])
+        
+        # Priority 2: Handle transformed dialogue structure
+        elif 'transformed_turns' in dialogue_data:
+            self.logger.debug(f"Found transformed_turns with {len(dialogue_data['transformed_turns'])} turns")
             for turn in dialogue_data['transformed_turns']:
                 if turn.get('speaker') == 'USER':  # Focus on user utterances for personality evaluation
-                    evaluation_turns.append({
-                        'turn_index': turn.get('turn_index', 0),
-                        'utterance': turn.get('transformed_utterance', turn.get('utterance', '')),
-                        'speaker': 'USER'
-                    })
+                    utterance = turn.get('transformed_utterance', turn.get('utterance', ''))
+                    if utterance.strip():  # Check for non-empty utterance
+                        evaluation_turns.append({
+                            'turn_index': turn.get('turn_index', 0),
+                            'utterance': utterance,
+                            'speaker': 'USER'
+                        })
         
-        # Handle direct turns structure
+        # Priority 3: Handle direct turns structure
         elif 'turns' in dialogue_data:
+            self.logger.debug(f"Found turns with {len(dialogue_data['turns'])} turns")
             for i, turn in enumerate(dialogue_data['turns']):
                 if isinstance(turn, dict):
                     speaker = turn.get('speaker', 'USER' if i % 2 == 0 else 'SYSTEM')
                     if speaker == 'USER':
-                        evaluation_turns.append({
-                            'turn_index': i,
-                            'utterance': turn.get('utterance', turn.get('text', '')),
-                            'speaker': 'USER'
-                        })
+                        utterance = turn.get('utterance', turn.get('text', ''))
+                        if utterance.strip():  # Check for non-empty utterance
+                            evaluation_turns.append({
+                                'turn_index': i,
+                                'utterance': utterance,
+                                'speaker': 'USER'
+                            })
         
-        # Handle list of utterances
+        # Priority 4: Handle list of utterances
         elif isinstance(dialogue_data, list):
+            self.logger.debug(f"Found list with {len(dialogue_data)} items")
             for i, turn in enumerate(dialogue_data):
                 if i % 2 == 0:  # Assume user turns are even-indexed
                     utterance = turn if isinstance(turn, str) else turn.get('utterance', '')
-                    evaluation_turns.append({
-                        'turn_index': i,
-                        'utterance': utterance,
-                        'speaker': 'USER'
-                    })
+                    if utterance.strip():  # Check for non-empty utterance
+                        evaluation_turns.append({
+                            'turn_index': i,
+                            'utterance': utterance,
+                            'speaker': 'USER'
+                        })
         
+        # Priority 5: Try to extract from original_dialogue if available
+        elif 'original_dialogue' in dialogue_data:
+            self.logger.debug("No direct turns found, trying original_dialogue")
+            original_dialogue = dialogue_data['original_dialogue']
+            if 'turns' in original_dialogue:
+                for i, turn in enumerate(original_dialogue['turns']):
+                    if isinstance(turn, dict):
+                        speaker = turn.get('speaker', 'USER' if i % 2 == 0 else 'SYSTEM')
+                        if speaker == 'USER':
+                            utterance = turn.get('utterance', turn.get('text', ''))
+                            if utterance.strip():
+                                evaluation_turns.append({
+                                    'turn_index': i,
+                                    'utterance': utterance,
+                                    'speaker': 'USER'
+                                })
+        
+        self.logger.debug(f"Extracted {len(evaluation_turns)} user turns for evaluation")
         return evaluation_turns
     
     def _create_evaluation_prompt(self, 
@@ -360,83 +440,3 @@ Provide only the Big Five scores as decimal values between 0.0 and 1.0. Focus on
             
         else:
             raise ValueError("No valid JSON found in evaluation response")
-    
-    def _calculate_transformation_accuracy(self,
-                                         original_big5: Dict[str, float],
-                                         evaluated_big5: Dict[str, float]) -> Dict[str, float]:
-        """
-        Calculate accuracy metrics between intended and evaluated personality
-        
-        Args:
-            original_big5: Intended personality scores
-            evaluated_big5: Evaluated personality scores
-            
-        Returns:
-            Accuracy metrics for each dimension
-        """
-        accuracy_metrics = {}
-        
-        for dimension in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
-            original_score = original_big5.get(dimension.upper()[0], original_big5.get(dimension, 0.5))
-            evaluated_score = evaluated_big5.get(dimension, 0.5)
-            
-            # Calculate absolute difference (lower is better)
-            absolute_difference = abs(original_score - evaluated_score)
-            
-            # Convert to accuracy score (0-1, higher is better)
-            accuracy = 1.0 - absolute_difference
-            
-            # Calculate correlation direction (positive if both high/low, negative if opposite)
-            correlation = 1.0 if (original_score - 0.5) * (evaluated_score - 0.5) >= 0 else -1.0
-            
-            accuracy_metrics[dimension] = {
-                'accuracy_score': max(0.0, accuracy),
-                'absolute_difference': absolute_difference,
-                'correlation_direction': correlation,
-                'original_score': original_score,
-                'evaluated_score': evaluated_score
-            }
-        
-        return accuracy_metrics
-    
-    def _assess_overall_quality(self, accuracy_metrics: Dict[str, Dict[str, float]]) -> Dict[str, Any]:
-        """
-        Assess overall transformation quality based on accuracy metrics
-        
-        Args:
-            accuracy_metrics: Per-dimension accuracy metrics
-            
-        Returns:
-            Overall quality assessment
-        """
-        # Calculate average accuracy
-        accuracy_scores = [metrics['accuracy_score'] for metrics in accuracy_metrics.values()]
-        average_accuracy = sum(accuracy_scores) / len(accuracy_scores)
-        
-        # Calculate correlation consistency
-        correlations = [metrics['correlation_direction'] for metrics in accuracy_metrics.values()]
-        positive_correlations = sum(1 for c in correlations if c > 0)
-        correlation_consistency = positive_correlations / len(correlations)
-        
-        # Determine quality level
-        if average_accuracy >= 0.8 and correlation_consistency >= 0.8:
-            quality_level = 'Excellent'
-            quality_description = 'Personality traits accurately reflected in dialogue'
-        elif average_accuracy >= 0.6 and correlation_consistency >= 0.6:
-            quality_level = 'Good'
-            quality_description = 'Personality traits generally well reflected with minor discrepancies'
-        elif average_accuracy >= 0.4 and correlation_consistency >= 0.4:
-            quality_level = 'Fair'
-            quality_description = 'Some personality traits reflected, significant room for improvement'
-        else:
-            quality_level = 'Poor'
-            quality_description = 'Personality traits poorly reflected in dialogue transformation'
-        
-        return {
-            'quality_level': quality_level,
-            'quality_description': quality_description,
-            'average_accuracy': average_accuracy,
-            'correlation_consistency': correlation_consistency,
-            'best_dimensions': [dim for dim, metrics in accuracy_metrics.items() if metrics['accuracy_score'] >= 0.7],
-            'improvement_needed': [dim for dim, metrics in accuracy_metrics.items() if metrics['accuracy_score'] < 0.5]
-        }
