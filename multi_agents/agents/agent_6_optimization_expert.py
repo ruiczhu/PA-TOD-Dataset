@@ -167,7 +167,7 @@ Quality standards:
         
         # Calculate gaps for each dimension
         dimension_gaps = {}
-        for dimension in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
+        for dimension in ['O', 'C', 'E', 'A', 'N']:
             original_score = original_big5.get(dimension.upper()[0], original_big5.get(dimension, 0.5))
             evaluated_score = evaluated_big5.get(dimension, 0.5)
             
@@ -362,7 +362,7 @@ Focus on creating targeted improvements that enhance personality expression whil
         
         if big_five:
             lines.append("**Target Big Five Scores:**")
-            for dimension in ['openness', 'conscientiousness', 'extraversion', 'agreeableness', 'neuroticism']:
+            for dimension in ['O', 'C', 'E', 'A', 'N']:
                 target_score = big_five.get(dimension.upper()[0], big_five.get(dimension, 0.5))
                 current_gap = optimization_analysis.get('optimization_targets', {}).get(dimension, {}).get('gap', 0)
                 priority = 'HIGH' if dimension in optimization_analysis.get('priority_dimensions', []) else 'MEDIUM' if dimension in optimization_analysis.get('minor_adjustments', []) else 'LOW'

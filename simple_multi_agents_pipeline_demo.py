@@ -8,7 +8,7 @@ logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(name)s - %(le
 pipeline = CompletePipeline()
 def test_basic_functionality():
     input_data_path = "datasets/sgd_processed_train"
-    output_directory = "output/mAPipelineOutput"
+    output_directory = "output/mAPipelineOutput/1"
     batch_size = 1
     max_dialogues = 1
     random_seed = 42

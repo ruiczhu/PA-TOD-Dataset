@@ -383,11 +383,11 @@ Provide your assessment in the following JSON format:
 
 {{
     "big_five_scores": {{
-        "openness": 0.X,
-        "conscientiousness": 0.X,
-        "extraversion": 0.X,
-        "agreeableness": 0.X,
-        "neuroticism": 0.X
+        "O": 0.X,
+        "C": 0.X,
+        "E": 0.X,
+        "A": 0.X,
+        "N": 0.X
     }}
 }}
 
