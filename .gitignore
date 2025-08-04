@@ -14,8 +14,11 @@ main.tex
 /personality_behavior_val/val_results
 /personality_behavior_val/plots
 /personality_behavior_val/processed_data_encoded.csv
+/personality_behavior_val/simple_big5_results.csv
 /analysis_plots*
 /complete_analysis_results_summary*
 # /multi_agents
 /Test_Configurable.py
 /Test_Limited.py
+
+/Model
