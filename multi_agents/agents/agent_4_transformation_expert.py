@@ -12,7 +12,6 @@ import logging
 from typing import Dict, List, Any, Optional, Tuple
 
 from multi_agents.utils.llm_interface import LLMInterface
-from multi_agents.utils.data_structures import EnhancedDialogue
 
 
 class TransformationExpert:

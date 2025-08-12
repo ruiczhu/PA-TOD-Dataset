@@ -11,7 +11,7 @@ import logging
 from typing import Dict, List, Any, Optional
 
 from multi_agents.utils.llm_interface import LLMInterface
-from multi_agents.utils.data_structures import UserProfile, EnhancedDialogue
+from multi_agents.utils.data_structures import UserProfile
 
 # Import existing personality framework
 from MPEAF.personality_framework import PersonalityFramework
